@@ -1,0 +1,61 @@
+name: Release
+
+# Push a tag like v4.0.0: GitHub builds the zip from this commit and attaches it to a Release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write      # create the Release and upload the zip
+  id-token: write      # sign the build provenance
+  attestations: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version from tag
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Test
+        working-directory: rust
+        run: cargo test --workspace
+
+      - name: Build exe and DLL (dist profile)
+        run: python -I release.py rust-build --version ${{ env.VERSION }}
+
+      - name: Build zip
+        run: python -I release.py rust --version ${{ env.VERSION }} --out out
+
+      - name: Check zip contents
+        run: python -I dev/test_release_rust.py
+
+      # Lets anyone check the zip was built here from this commit: gh attestation verify <zip> -R <repo>
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: out/NMS.rs-${{ env.VERSION }}.zip
+
+      - name: Publish Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip="out/NMS.rs-${VERSION}.zip"
+          notes="NMS.rs ${VERSION}, built by GitHub Actions from this tag.
+
+          Install: extract the zip into your No Man's Sky folder (the one with Binaries and GAMEDATA), open NMS.rs\\nms-rs.exe, install the mods you want and press Play.
+
+          SHA-256: $(cut -d' ' -f1 "${zip}.sha256")"
+          gh release create "$GITHUB_REF_NAME" "$zip" "${zip}.sha256" --title "NMS.rs ${VERSION}" --notes "$notes"
