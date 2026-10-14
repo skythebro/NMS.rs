@@ -1,0 +1,216 @@
+[
+  {
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "SORTBYTYPE"
+    ],
+    "SEC_SAVE_TO": "deposit_btn"
+  },
+  {
+    "SEC_EDIT": "deposit_btn",
+    "VALUE_CHANGE_TABLE": [
+      [
+        "ID",
+        "DEPOSIT"
+      ],
+      [
+        "Position Y",
+        "68.000000"
+      ]
+    ]
+  },
+  {
+    "SEC_EDIT": "deposit_btn",
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "BG"
+    ],
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Width",
+        "58.000000"
+      ],
+      [
+        "Height",
+        "58.000000"
+      ]
+    ]
+  },
+  {
+    "SEC_EDIT": "deposit_btn",
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Image",
+        "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/QUICKDEPOSIT.DDS"
+      ]
+    ],
+    "REPLACE_TYPE": "ALL",
+    "SPECIAL_KEY_WORDS": [
+      "Image",
+      "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/CATAGORY.SORTITEM.DDS"
+    ]
+  },
+  {
+    "SEC_EDIT": "deposit_btn",
+    "SPECIAL_KEY_WORDS": [
+      "Image",
+      "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/QUICKDEPOSIT.DDS"
+    ],
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Width",
+        "52.000000"
+      ],
+      [
+        "Height",
+        "52.000000"
+      ]
+    ]
+  },
+  {
+    "SEC_EDIT": "deposit_btn",
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Image",
+        "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/QUICKDEPOSITBG.DDS"
+      ]
+    ],
+    "REPLACE_TYPE": "ALL",
+    "SPECIAL_KEY_WORDS": [
+      "Image",
+      "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/CATAGORY.SORTBG.DDS"
+    ]
+  },
+  {
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "SORTBYTYPE"
+    ],
+    "SEC_ADD_NAMED": "deposit_btn"
+  },
+  {
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "TECH_EXPAND"
+    ],
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Position Y",
+        "350.000000"
+      ]
+    ]
+  },
+  {
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "ITEM_EXPAND"
+    ],
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Position Y",
+        "420.000000"
+      ]
+    ]
+  },
+  {
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "SORTBYTYPE"
+    ],
+    "SEC_SAVE_TO": "lock_btn"
+  },
+  {
+    "SEC_EDIT": "lock_btn",
+    "VALUE_CHANGE_TABLE": [
+      [
+        "ID",
+        "LOCKMODE"
+      ],
+      [
+        "Position X",
+        "32.631579"
+      ],
+      [
+        "Position Y",
+        "68.000000"
+      ]
+    ]
+  },
+  {
+    "SEC_EDIT": "lock_btn",
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "BG"
+    ],
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Width",
+        "58.000000"
+      ],
+      [
+        "Height",
+        "58.000000"
+      ]
+    ]
+  },
+  {
+    "SEC_EDIT": "lock_btn",
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Image",
+        "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/SUITLOCK.DDS"
+      ]
+    ],
+    "REPLACE_TYPE": "ALL",
+    "SPECIAL_KEY_WORDS": [
+      "Image",
+      "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/CATAGORY.SORTITEM.DDS"
+    ]
+  },
+  {
+    "SEC_EDIT": "lock_btn",
+    "SPECIAL_KEY_WORDS": [
+      "Image",
+      "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/SUITLOCK.DDS"
+    ],
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Width",
+        "36.000000"
+      ],
+      [
+        "Height",
+        "36.000000"
+      ],
+      [
+        "Horizontal",
+        "Center"
+      ],
+      [
+        "Vertical",
+        "Middle"
+      ]
+    ]
+  },
+  {
+    "SEC_EDIT": "lock_btn",
+    "VALUE_CHANGE_TABLE": [
+      [
+        "Image",
+        "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/QUICKDEPOSITBG.DDS"
+      ]
+    ],
+    "REPLACE_TYPE": "ALL",
+    "SPECIAL_KEY_WORDS": [
+      "Image",
+      "TEXTURES/UI/FRONTEND/ICONS/CATEGORIES/CATAGORY.SORTBG.DDS"
+    ]
+  },
+  {
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "SORTBYTYPE"
+    ],
+    "SEC_ADD_NAMED": "lock_btn"
+  }
+]

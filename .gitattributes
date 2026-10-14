@@ -1,0 +1,24 @@
+# Text files are stored with LF and checked out with your platform's line endings.
+* text=auto
+
+# Files that ship in the release zip or are byte-compared test fixtures keep their exact bytes,
+# so a fresh clone builds the same zip.
+mods/** -text
+presets/** -text
+rust/crates/nms-amumss/tests/data/** -text
+
+# Windows scripts keep CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary game files and images
+*.MBIN binary
+*.mbin binary
+*.DDS binary
+*.dds binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.rgba binary
+*.zip binary

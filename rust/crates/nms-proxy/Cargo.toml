@@ -1,0 +1,29 @@
+[package]
+name = "nms-proxy"
+description = "xinput9_1_0.dll proxy that loads the Rust mod core into NMS.exe at startup."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "xinput9_1_0"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+nms-core.workspace = true
+nms-sdk.workspace = true
+nms-mods.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[target.'cfg(windows)'.build-dependencies]
+winresource.workspace = true
+
+[features]
+# Dev-only "NMS.rs self-test" section on the Mods page (live hook and patch switches for the core
+# gate). Never enabled by default, by release.py or by the dist build.
+selftest = []
+

@@ -1,0 +1,11 @@
+[package]
+name = "nms-amumss"
+description = "Read AMUMSS Lua mod scripts and apply their change tables to EXML, for the UI merge."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+xmltree = { version = "0.12", features = ["attribute-order"] }

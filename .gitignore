@@ -1,0 +1,47 @@
+# Cargo
+/rust/target/
+target/
+**/*.rs.bk
+
+# release.py output and scratch (zips go to the --out folder you pick)
+/build/
+/release/
+*.zip
+*.zip.sha256
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Logs and files a mod or the game writes for itself
+*.log
+filenames.json
+filenames.txt
+filenames.*
+conflicts.txt
+merge_order.txt
+disabled.txt
+
+# Secrets
+.env
+.env.*
+
+# Game binaries and extracted game data never belong here
+NMS.exe
+*.pak
+*.EXML
+*.MXML
+!rust/crates/nms-amumss/tests/data/**/*.mxml
+
+# Editors and OS
+.vs/
+.vscode/
+.idea/
+.cursor/
+.claude/
+*.swp
+*~
+Thumbs.db
+Desktop.ini
+.DS_Store

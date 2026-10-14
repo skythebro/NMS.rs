@@ -1,0 +1,19 @@
+[package]
+name = "nms-mods"
+description = "The mods ported from Python, registered with the core at game start."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+nms-core.workspace = true
+nms-sdk.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[[example]]
+name = "big_plans"
+path = "examples/big_plans.rs"

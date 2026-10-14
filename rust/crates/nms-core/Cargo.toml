@@ -1,0 +1,15 @@
+[package]
+name = "nms-core"
+description = "Pattern scan, live code patches, hooks, settings, logs and the settings pipe for No Man's Sky mods."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+retour.workspace = true

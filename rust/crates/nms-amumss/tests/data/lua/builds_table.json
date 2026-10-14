@@ -1,0 +1,30 @@
+{
+  "parse": {
+    "_apply": false,
+    "_skip_reason": "cannot parse value at 'NEW_SPECIAL\\n                },\\n         '",
+    "MODIFICATIONS": [
+      {
+        "MBIN_CHANGE_TABLE": [
+          {
+            "MBIN_FILE_SOURCE": [
+              "METADATA/REALITY/TABLES/PURCHASEABLESPECIALS.MBIN"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "targets": [
+    "METADATA/REALITY/TABLES/PURCHASEABLESPECIALS.MBIN"
+  ],
+  "applyable": false,
+  "mbin_sources": [
+    [
+      "METADATA/REALITY/TABLES/PURCHASEABLESPECIALS.MBIN",
+      "METADATA/REALITY/TABLES/PURCHASEABLESPECIALS.MBIN"
+    ]
+  ],
+  "text_targets": [
+    "METADATA/REALITY/TABLES/PURCHASEABLESPECIALS.MBIN"
+  ]
+}

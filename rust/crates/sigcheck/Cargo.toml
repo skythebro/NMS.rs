@@ -1,0 +1,11 @@
+[package]
+name = "sigcheck"
+description = "Offline check that every mod signature matches exactly once in an NMS.exe."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+nms-core.workspace = true
+nms-sdk.workspace = true

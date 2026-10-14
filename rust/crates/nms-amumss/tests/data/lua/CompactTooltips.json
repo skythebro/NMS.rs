@@ -1,0 +1,63 @@
+{
+  "parse": {
+    "MOD_FILENAME": "CompactTooltips.pak",
+    "MOD_AUTHOR": "skythebro",
+    "LUA_AUTHOR": "skythebro",
+    "MOD_DESCRIPTION": "A tighter item tooltip. Shared action rows and the value section are private copies.",
+    "NMS_VERSION": "6.x",
+    "MODIFICATIONS": [
+      {
+        "MBIN_CHANGE_TABLE": [
+          {
+            "MBIN_FILE_SOURCE": "UI/POPUP_TECHNOLOGY.MBIN",
+            "EXML_CHANGE_TABLE": []
+          },
+          {
+            "MBIN_FILE_SOURCE": [
+              [
+                "UI/COMPONENTS/ACTIONBUTTON.MBIN",
+                "UI/BIGGERITEMGRIDS/TOOLTIP/ACTIONBUTTON.MBIN"
+              ]
+            ],
+            "EXML_CHANGE_TABLE": []
+          },
+          {
+            "MBIN_FILE_SOURCE": [
+              [
+                "UI/COMPONENTS/TECH/SUBSTANCEAMOUNTSECTION.MBIN",
+                "UI/BIGGERITEMGRIDS/TOOLTIP/SUBSTANCEAMOUNTSECTION.MBIN"
+              ]
+            ],
+            "EXML_CHANGE_TABLE": []
+          }
+        ]
+      }
+    ],
+    "_apply": true
+  },
+  "targets": [
+    "UI/BIGGERITEMGRIDS/TOOLTIP/ACTIONBUTTON.MBIN",
+    "UI/BIGGERITEMGRIDS/TOOLTIP/SUBSTANCEAMOUNTSECTION.MBIN",
+    "UI/POPUP_TECHNOLOGY.MBIN"
+  ],
+  "applyable": true,
+  "mbin_sources": [
+    [
+      "UI/POPUP_TECHNOLOGY.MBIN",
+      "UI/POPUP_TECHNOLOGY.MBIN"
+    ],
+    [
+      "UI/COMPONENTS/ACTIONBUTTON.MBIN",
+      "UI/BIGGERITEMGRIDS/TOOLTIP/ACTIONBUTTON.MBIN"
+    ],
+    [
+      "UI/COMPONENTS/TECH/SUBSTANCEAMOUNTSECTION.MBIN",
+      "UI/BIGGERITEMGRIDS/TOOLTIP/SUBSTANCEAMOUNTSECTION.MBIN"
+    ]
+  ],
+  "text_targets": [
+    "UI/BIGGERITEMGRIDS/TOOLTIP/ACTIONBUTTON.MBIN",
+    "UI/BIGGERITEMGRIDS/TOOLTIP/SUBSTANCEAMOUNTSECTION.MBIN",
+    "UI/POPUP_TECHNOLOGY.MBIN"
+  ]
+}

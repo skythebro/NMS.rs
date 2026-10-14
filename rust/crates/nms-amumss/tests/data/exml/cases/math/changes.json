@@ -1,0 +1,15 @@
+[
+  {
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "B"
+    ],
+    "MATH_OPERATION": "*",
+    "VALUE_CHANGE_TABLE": [
+      [
+        "N",
+        "3"
+      ]
+    ]
+  }
+]

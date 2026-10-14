@@ -1,0 +1,11 @@
+{
+  "parse": {
+    "_apply": false,
+    "_skip_reason": "cannot parse value at 'function() end'",
+    "MODIFICATIONS": []
+  },
+  "targets": [],
+  "applyable": false,
+  "mbin_sources": [],
+  "text_targets": []
+}

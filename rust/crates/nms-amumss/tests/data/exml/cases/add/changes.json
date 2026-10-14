@@ -1,0 +1,16 @@
+[
+  {
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "A"
+    ],
+    "SEC_SAVE_TO": "copy_a"
+  },
+  {
+    "SPECIAL_KEY_WORDS": [
+      "ID",
+      "B"
+    ],
+    "SEC_ADD_NAMED": "copy_a"
+  }
+]

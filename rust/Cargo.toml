@@ -1,0 +1,63 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/nms-core",
+    "crates/nms-sdk",
+    "crates/nms-mods",
+    "crates/nms-proxy",
+    "crates/nms-launcher",
+    "crates/nms-amumss",
+    "crates/sigcheck",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+
+[workspace.dependencies]
+nms-core = { path = "crates/nms-core" }
+nms-sdk = { path = "crates/nms-sdk" }
+nms-mods = { path = "crates/nms-mods" }
+nms-amumss = { path = "crates/nms-amumss" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
+egui = "0.34"
+egui_software_backend = "0.0.3"
+# Same version and features as egui's epaint uses: checks a system font before egui parses it.
+skrifa = { version = "0.40", default-features = false, features = ["std", "autohint_shaping"] }
+sha2 = "0.10"
+winresource = "0.1"
+ureq = { version = "2.12", default-features = false, features = ["tls", "json"] }
+retour = { version = "0.3", default-features = false }
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_Registry",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_System_IO",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+panic = "abort"
+debug = 1
+
+# What the zip ships (`py -3 release.py rust-build`): no debug info, no symbols, no build-machine paths.
+[profile.dist]
+inherits = "release"
+debug = 0
+strip = "symbols"
+lto = "fat"
+codegen-units = 1

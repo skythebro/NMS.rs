@@ -1,0 +1,1 @@
+NMS_MOD_DEFINITION_CONTAINER = function() end

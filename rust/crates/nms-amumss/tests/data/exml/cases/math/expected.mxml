@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Data template="t">
+  <Property name="Children">
+    <Property name="Layer" value="GcNGuiLayerData">
+      <Property name="ID" value="A" />
+      <Property name="N" value="1.000000" />
+    </Property>
+    <Property name="Layer" value="GcNGuiLayerData">
+      <Property name="ID" value="B" />
+      <Property name="N" value="6.000000" />
+    </Property>
+  </Property>
+</Data>
