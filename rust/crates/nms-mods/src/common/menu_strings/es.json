@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "Ocultar aviso de mods",
+  "desc.NMS.rs.hide_mod_warning": "Omite la pantalla de aviso de mods instalados al iniciar el juego. Los mods se siguen cargando. Se aplica en el próximo inicio.",
   "label.SphereSizedMining.enabled": "Escalar rendimiento",
   "desc.SphereSizedMining.enabled": "Sube los topes de recursos por excavación del Manipulador de terreno para las esferas mediana y grande. Desactivado repone al instante los topes vanilla.",
   "label.SphereSizedMining.scaling": "Crece según",

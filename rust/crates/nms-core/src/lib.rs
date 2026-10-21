@@ -3,6 +3,7 @@
 //! Every behaviour change is a live toggle that stays vanilla when its signature is missing or
 //! found more than once. Addresses are never hard-coded: code is found by unique byte patterns.
 
+pub mod game;
 pub mod image;
 pub mod ipc;
 pub mod log;
@@ -14,7 +15,11 @@ pub mod settings;
 pub mod spawn;
 
 #[cfg(windows)]
+pub mod detour;
+#[cfg(windows)]
 pub mod hook;
+#[cfg(windows)]
+pub mod jump;
 #[cfg(windows)]
 pub mod mem;
 #[cfg(windows)]

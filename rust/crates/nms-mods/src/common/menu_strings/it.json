@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "Nascondi avviso mod",
+  "desc.NMS.rs.hide_mod_warning": "Salta la schermata di avviso delle mod installate all'avvio del gioco. Le mod vengono comunque caricate. Effettivo dal prossimo avvio.",
   "label.SphereSizedMining.enabled": "Scala la resa",
   "desc.SphereSizedMining.enabled": "Alza i limiti di risorse per scavo del Manipolatore del terreno per le sfere media e grande. Disattivato rimette subito i limiti vanilla.",
   "label.SphereSizedMining.scaling": "La resa cresce con",

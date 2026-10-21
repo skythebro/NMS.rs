@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "Modwaarschuwing verbergen",
+  "desc.NMS.rs.hide_mod_warning": "Slaat bij het starten het waarschuwingsscherm over geïnstalleerde mods over. Mods worden nog steeds geladen. Werkt vanaf de volgende start.",
   "label.SphereSizedMining.enabled": "Mijnopbrengst schalen",
   "desc.SphereSizedMining.enabled": "Verhoogt de grondstoflimieten per graafbeurt van de Terreinmanipulator voor de middelste en grote bol. Uit zet de vanilla-limieten meteen terug.",
   "label.SphereSizedMining.scaling": "Opbrengst groeit met",

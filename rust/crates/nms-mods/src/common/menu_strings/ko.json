@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "모드 경고 숨기기",
+  "desc.NMS.rs.hide_mod_warning": "게임 시작 시 모드 설치 경고 화면을 건너뜁니다. 모드는 계속 불러옵니다. 다음 실행부터 적용됩니다.",
   "label.SphereSizedMining.enabled": "채굴량 확장",
   "desc.SphereSizedMining.enabled": "지형 조작기의 1회 채굴 자원 상한을 중간과 큰 구체에서 높입니다. 꺼짐으로 하면 바로 바닐라 상한으로 돌아갑니다.",
   "label.SphereSizedMining.scaling": "상한 증가 기준",

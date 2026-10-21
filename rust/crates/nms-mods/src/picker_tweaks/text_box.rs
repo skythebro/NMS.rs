@@ -8,7 +8,8 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use nms_core::mem::{read_ptr, read_u32};
+use crate::common::context;
+use nms_core::mem::read_u32;
 use nms_core::process::ProcessImage;
 use nms_core::{Code, Pattern};
 use nms_sdk::sigs::ingame_options as sigs;
@@ -17,8 +18,6 @@ use nms_sdk::sigs::ingame_options as sigs;
 const STATE: usize = 0x670;
 /// Offset of the text manager inside the application object.
 const MGR_OFFSET: usize = 0x859970;
-/// Offset of the input controller inside the application object.
-const CONTROLLER_OFFSET: usize = 0x933B78;
 /// The longest text the player can type.
 const TYPED_MAX: u32 = 40;
 
@@ -51,7 +50,8 @@ pub fn locate(image: &ProcessImage) -> Result<(), String> {
     }
     let fixed = |range: std::ops::Range<usize>, want: &[u8]| code.get(range).is_some_and(|b| b == want);
     if !(fixed(0..3, &[0x48, 0x8B, 0x05])
-        && fixed(7..22, &[0x41, 0xB0, 0x01, 0xBA, 0x01, 0x00, 0x00, 0x00, 0x48, 0x8B, 0x88, 0x78, 0x3B, 0x93, 0x00])
+        && fixed(7..18, &[0x41, 0xB0, 0x01, 0xBA, 0x01, 0x00, 0x00, 0x00, 0x48, 0x8B, 0x88])
+        && code.get(18..22).is_some_and(context::controller_disp_matches)
         && fixed(22..26, &[0x44, 0x88, 0x61, 0x40])
         && fixed(26..33, &[0x48, 0x81, 0xC1, 0x00, 0x15, 0x00, 0x00])
         && code.get(33) == Some(&0xE8))
@@ -68,13 +68,10 @@ pub fn locate(image: &ProcessImage) -> Result<(), String> {
     Ok(())
 }
 
-/// The application object, or `None` before the game created it.
+/// The application data, or `None` before the game created it (core context first, then the
+/// global read from the close code).
 pub fn app() -> Option<usize> {
-    let global = APP_GLOBAL.load(Ordering::Acquire);
-    if global == 0 {
-        return None;
-    }
-    read_ptr(global)
+    context::data(APP_GLOBAL.load(Ordering::Acquire))
 }
 
 /// The real text manager (the game also runs `Update` on a second, unrelated instance).
@@ -82,9 +79,9 @@ pub fn real_mgr() -> Option<usize> {
     app().map(|a| a + MGR_OFFSET)
 }
 
-/// The input controller (`[App+0x933B78]`): action table, contexts, action sets.
+/// The input controller: action table, contexts, action sets.
 pub fn controller() -> Option<usize> {
-    app().and_then(|a| read_ptr(a + CONTROLLER_OFFSET))
+    context::input_controller(APP_GLOBAL.load(Ordering::Acquire))
 }
 
 /// The manager is idle: no box of ours or the game's is open.

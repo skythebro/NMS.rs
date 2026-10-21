@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "隱藏模組警告",
+  "desc.NMS.rs.hide_mod_warning": "跳過遊戲啟動時的已安裝模組警告畫面。模組仍會載入。下次啟動遊戲時生效。",
   "label.SphereSizedMining.enabled": "放大採礦產量",
   "desc.SphereSizedMining.enabled": "提高地形操縱器在中、大球體下每次挖掘的資源上限。關閉會立即恢復原版上限。",
   "label.SphereSizedMining.scaling": "上限成長方式",

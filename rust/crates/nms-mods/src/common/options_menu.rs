@@ -347,12 +347,14 @@ fn install_text(image: &ProcessImage) -> Result<(), String> {
     // application global and the "switch action set" routine we need to undo a popup that is left open.
     let close = update + sigs::TEXT_CLOSE_AT;
     let code = image.read(close, sigs::TEXT_CLOSE_LEN).ok_or("text popup update unreadable")?;
-    let fixed = |range: std::ops::Range<usize>, want: &[u8]| code[range.clone()] == *want;
-    if !(fixed(0..3, &[0x48, 0x8B, 0x05])
-        && fixed(7..22, &[0x41, 0xB0, 0x01, 0xBA, 0x01, 0x00, 0x00, 0x00, 0x48, 0x8B, 0x88, 0x78, 0x3B, 0x93, 0x00])
+    let fixed = |range: std::ops::Range<usize>, want: &[u8]| code.get(range).is_some_and(|b| b == want);
+    if !(code.len() >= 38
+        && fixed(0..3, &[0x48, 0x8B, 0x05])
+        && fixed(7..18, &[0x41, 0xB0, 0x01, 0xBA, 0x01, 0x00, 0x00, 0x00, 0x48, 0x8B, 0x88])
+        && code.get(18..22).is_some_and(super::context::controller_disp_matches)
         && fixed(22..26, &[0x44, 0x88, 0x61, 0x40])
         && fixed(26..33, &[0x48, 0x81, 0xC1, 0x00, 0x15, 0x00, 0x00])
-        && code[33] == 0xE8)
+        && code.get(33) == Some(&0xE8))
     {
         return Err("text popup close code changed (game update?)".into());
     }
@@ -360,6 +362,9 @@ fn install_text(image: &ProcessImage) -> Result<(), String> {
     let rel = i32::from_le_bytes([code[34], code[35], code[36], code[37]]);
     SET_ACTIONS.store((image.va(close + 38) as i64 + i64::from(rel)) as usize, Ordering::Release);
     text_input_update::subscribe(image, sigs::TEXT_UPDATE, None, Some(on_text_update))?;
+    // Give held input back from the core's per-frame tick too, so it can never stay off in a game
+    // state that does not run the text box update. Optional: the text update still does it.
+    let _ = nms_core::game::dispatch::on_tick("Mods page", nms_core::game::dispatch::TickPhase::Post, release_input_tick);
     install_back_guard(image)?;
     TEXT_READY.store(true, Ordering::Release);
     Ok(())
@@ -943,7 +948,7 @@ fn close_popup(mgr: usize) {
     // Only a popup the game has not closed itself still holds the keyboard. After Accept or Cancel the
     // game already gave it back, so then only `Stop` is needed.
     let still_open = read_u32(mgr + TEXT_STATE_OFFSET) == Some(1);
-    let controller = still_open.then(|| read_ptr(APP_GLOBAL.load(Ordering::Acquire))).flatten().and_then(|app| read_ptr(app + TEXT_CONTROLLER_OFFSET));
+    let controller = still_open.then(|| super::context::input_controller(APP_GLOBAL.load(Ordering::Acquire))).flatten();
     if let Some(controller) = controller {
         // SAFETY: the byte and the routine are the ones the game's own close code uses (checked at start).
         unsafe {
@@ -957,8 +962,6 @@ fn close_popup(mgr: usize) {
     unsafe { stop(mgr as u64) };
 }
 
-/// Offset of the input controller in the application object.
-const TEXT_CONTROLLER_OFFSET: usize = 0x933B78;
 
 /// The result is read this long after the game closed the box. Until then the manager still reads as
 /// busy, so a page that ignores Back while the box is busy also ignores the press that closed it.
@@ -974,8 +977,10 @@ static HOLD_UNTIL_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU6
 
 /// Switch the game's input action set on or off, exactly as the text popup does at start and end.
 fn set_input(enabled: bool) {
-    let controller = read_ptr(APP_GLOBAL.load(Ordering::Acquire)).and_then(|app| read_ptr(app + TEXT_CONTROLLER_OFFSET));
-    let Some(controller) = controller else { return };
+    if SET_ACTIONS.load(Ordering::Acquire) == 0 {
+        return;
+    }
+    let Some(controller) = super::context::input_controller(APP_GLOBAL.load(Ordering::Acquire)) else { return };
     // SAFETY: the byte and the routine are the ones the game's own start and close code uses (checked at start).
     unsafe {
         let _ = nms_core::mem::write(controller + 0x40, u8::from(!enabled));
@@ -988,6 +993,11 @@ fn set_input(enabled: bool) {
 fn hold_input() {
     set_input(false);
     HOLD_UNTIL_MS.store(now_ms() + HOLD_MS, Ordering::Release);
+}
+
+/// The core's after-update tick (main thread).
+fn release_input_tick(_: &nms_core::game::dispatch::Tick) {
+    release_input_if_due();
 }
 
 /// Give input back once the hold is over. Runs every frame, so input can never stay off.
@@ -1005,7 +1015,7 @@ const TEXT_KEYBOARD_FLAG_OFFSET: usize = 0xAF4;
 const TEXT_MGR_OFFSET: usize = 0x859970;
 /// The real text manager (the game also runs `Update` on a second, unrelated instance).
 fn real_mgr() -> Option<usize> {
-    read_ptr(APP_GLOBAL.load(Ordering::Acquire)).map(|app| app + TEXT_MGR_OFFSET)
+    super::context::data(APP_GLOBAL.load(Ordering::Acquire)).map(|app| app + TEXT_MGR_OFFSET)
 }
 
 /// The press that closes the box with B can also reach the page as Back and leave the Mods page. If

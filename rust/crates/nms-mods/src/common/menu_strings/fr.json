@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "Masquer l'avertissement des mods",
+  "desc.NMS.rs.hide_mod_warning": "Passe l'écran d'avertissement des mods installés au lancement du jeu. Les mods restent chargés. Prend effet au prochain lancement.",
   "label.SphereSizedMining.enabled": "Adapter le rendement",
   "desc.SphereSizedMining.enabled": "Relève les plafonds de ressources par creusage du manipulateur de terrain pour les sphères moyenne et grande. Désactivé remet aussitôt les plafonds vanilla.",
   "label.SphereSizedMining.scaling": "Le rendement suit",

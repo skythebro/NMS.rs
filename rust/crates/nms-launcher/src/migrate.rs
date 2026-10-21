@@ -1,12 +1,15 @@
 //! Move a version 3 install (Python, `NMS.py`) over to NMS.rs: `nms-rs migrate [--yes]`, the
 //! "Old NMS.py setup found" panel and the Settings section.
 //!
-//! Order: refuse while NMS.exe runs or `NMS.rs\stock` is missing; back up everything that will
-//! change into `NMS.rs\backup\migrate-<time>`; carry NMS.py user files to NMS.rs; update our mods
-//! (files the user edited stay); delete the Python leftovers; strip the old Steam launch option;
-//! delete the zip-root Setup wrapper and, after the path checks, the NMS.py folder. A failed
-//! backup, update or clean-up stops before anything else is deleted. Running it again finds
-//! nothing and says so.
+//! Order: refuse while NMS.exe runs, while a program started from inside NMS.py (the old v3 Mod
+//! Manager window, its Python) is open, or while `NMS.rs\stock` is missing; back up everything
+//! that will change into `NMS.rs\backup\migrate-<time>`; carry NMS.py user files to NMS.rs; update
+//! our mods (files the user edited stay); delete the Python leftovers; strip the old Steam launch
+//! option; delete the zip-root Setup wrapper and, after the path checks, the NMS.py folder. A
+//! failed backup, update or clean-up stops before anything else is deleted. When files in NMS.py
+//! are still in use, the rest is deleted and a marker remembers the folder, so the next run
+//! finishes it even though `stock` and `runtime` may already be gone. Running it again after a
+//! full run finds nothing and says so.
 
 use std::fs;
 use std::io::{self, IsTerminal, Write};
@@ -43,6 +46,8 @@ pub struct Hooks<'a> {
     pub game_is_running: &'a dyn Fn() -> bool,
     pub launch_options: &'a dyn Fn() -> Vec<String>,
     pub strip_launch: &'a dyn Fn() -> Result<String, String>,
+    /// Names of the running programs whose executable is inside the given NMS.py folder.
+    pub py_processes: &'a dyn Fn(&Path) -> Vec<String>,
 }
 
 fn prod_strip() -> Result<String, String> {
@@ -54,7 +59,104 @@ pub fn production() -> Hooks<'static> {
         game_is_running: &files::game_is_running,
         launch_options: &steam::launch_option_strings,
         strip_launch: &prod_strip,
+        py_processes: &py_processes,
     }
+}
+
+/// Full executable paths of the running processes this user may query (Windows API only: no
+/// helper program is started). Processes we may not open (system, other users) are skipped.
+#[cfg(windows)]
+fn running_exe_paths() -> Vec<PathBuf> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::ProcessStatus::K32EnumProcesses;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    let mut pids = vec![0u32; 1024];
+    loop {
+        let size = (pids.len() * 4) as u32;
+        let mut used = 0u32;
+        // SAFETY: the buffer holds `size` bytes; `used` is a valid out pointer.
+        if unsafe { K32EnumProcesses(pids.as_mut_ptr(), size, &mut used) } == 0 {
+            return Vec::new();
+        }
+        if used < size || pids.len() >= 1 << 18 {
+            pids.truncate(used as usize / 4);
+            break;
+        }
+        pids.resize(pids.len() * 2, 0);
+    }
+    let own = std::process::id();
+    let mut name = vec![0u16; 32768];
+    let mut out = Vec::new();
+    for pid in pids {
+        if pid == 0 || pid == own {
+            continue;
+        }
+        // SAFETY: plain query access; a null handle (no access, process gone) is skipped.
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if handle.is_null() {
+            continue;
+        }
+        let mut len = name.len() as u32;
+        // SAFETY: `name` holds `len` UTF-16 units; the handle is closed right after.
+        let ok = unsafe { QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, name.as_mut_ptr(), &mut len) };
+        // SAFETY: the handle came from OpenProcess above.
+        unsafe { CloseHandle(handle) };
+        if ok != 0 && len > 0 {
+            out.push(PathBuf::from(OsString::from_wide(&name[..len as usize])));
+        }
+    }
+    out
+}
+
+/// Off Windows the old window would run under Wine and look like a Wine process: nothing found.
+#[cfg(not(windows))]
+fn running_exe_paths() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+/// The running programs started from inside `dir` (the NMS.py folder), by file name.
+pub fn py_processes(dir: &Path) -> Vec<String> {
+    exes_inside(dir, &running_exe_paths())
+}
+
+/// `path` resolved through links and junctions where it exists, lower case, without `\\?\`, so
+/// two spellings of one place compare equal.
+fn comparable(path: &Path) -> PathBuf {
+    let real = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let text = real.display().to_string();
+    let text = text.strip_prefix(r"\\?\UNC\").map(|t| format!(r"\\{t}")).unwrap_or(text);
+    let text = text.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(text);
+    PathBuf::from(text.to_lowercase())
+}
+
+/// File names of the executables in `exes` that live inside `dir` (any depth), compared on
+/// canonical paths without regard to case. `NMS.py2\x.exe` is not inside `NMS.py`.
+pub(crate) fn exes_inside(dir: &Path, exes: &[PathBuf]) -> Vec<String> {
+    if !dir.is_dir() {
+        return Vec::new();
+    }
+    let base = comparable(dir);
+    let mut names: Vec<String> = exes
+        .iter()
+        .filter(|exe| {
+            let real = comparable(exe);
+            real != base && real.starts_with(&base)
+        })
+        .map(|exe| exe.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| exe.display().to_string()))
+        .collect();
+    names.sort_by_key(|n| n.to_lowercase());
+    names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+    names
+}
+
+/// Written when NMS.py could only be deleted in part (files in use); names the folder so the
+/// next run may finish it although `stock` and `runtime` may be gone already.
+fn unfinished_marker(root: &Path) -> PathBuf {
+    paths::loader_dir(root).join("backup").join("nms_py_unfinished.txt")
 }
 
 /// What is left of version 3 in this game folder.
@@ -68,6 +170,8 @@ pub struct Legacy {
     pub python_mods: Vec<String>,
     pub old_option: bool,
     pub wrappers: Vec<PathBuf>,
+    /// Programs running from inside NMS.py (the old Mod Manager window): migrate waits for them.
+    pub py_open: Vec<String>,
 }
 
 impl Legacy {
@@ -182,13 +286,14 @@ pub fn detect(root: &Path, hooks: &Hooks) -> Legacy {
     python_mods.sort();
     python_mods.dedup();
     Legacy {
-        nms_py,
         nms_py_bytes: bytes,
         nms_py_files: count,
         python_files,
         python_mods,
         old_option: steam::has_old_nms_py_option(&(hooks.launch_options)()),
         wrappers: wrappers(root),
+        py_open: nms_py.as_deref().map(|dir| (hooks.py_processes)(dir)).unwrap_or_default(),
+        nms_py,
     }
 }
 
@@ -218,7 +323,10 @@ pub(crate) fn check_nms_py(root: &Path, path: &Path) -> Result<PathBuf, &'static
     if real.file_name().and_then(|n| n.to_str()) != Some(NMS_PY) {
         return Err("mig_why_name");
     }
-    if !(real.join("stock").is_dir() || real.join("runtime").is_dir()) {
+    // A run that could not delete everything (files in use) left the marker: what remains of the
+    // folder may lack both `stock` and `runtime`, and the next run still finishes it.
+    let unfinished = fs::read_to_string(unfinished_marker(root)).is_ok_and(|t| comparable(Path::new(t.trim())) == comparable(&real));
+    if !(real.join("stock").is_dir() || real.join("runtime").is_dir() || unfinished) {
         return Err("mig_why_layout");
     }
     if ["Binaries", "GAMEDATA", "NMS.rs"].iter().any(|n| real.join(n).exists()) {
@@ -495,8 +603,8 @@ impl Report {
                 };
                 let label = i18n.t(line.key);
                 let detail = line.detail_key.map(|k| i18n.t(k)).unwrap_or_else(|| line.detail.clone());
-                if label.contains("{path}") {
-                    format!("{mark} {}", label.replace("{path}", &detail))
+                if label.contains("{path}") || label.contains("{names}") {
+                    format!("{mark} {}", label.replace("{path}", &detail).replace("{names}", &detail))
                 } else if detail.is_empty() {
                     format!("{mark} {label}")
                 } else {
@@ -546,6 +654,11 @@ pub fn plan_lines(legacy: &Legacy, i18n: &I18n) -> Vec<String> {
     lines
 }
 
+/// "The old NMS.py Mod Manager is still open: ...", for the panel and the console.
+pub fn py_open_text(legacy: &Legacy, i18n: &I18n) -> String {
+    i18n.t("mig_py_open").replace("{names}", &legacy.py_open.join(", "))
+}
+
 fn short_list(items: &[String], limit: usize) -> String {
     if items.len() <= limit {
         items.join(", ")
@@ -558,12 +671,21 @@ pub fn migrate(root: &Path, hooks: &Hooks) -> Report {
     let mut report = Report::default();
     let legacy = detect(root, hooks);
     if !legacy.found() {
+        // NMS.py went away on its own (deleted by hand): a marker from a partial run is stale.
+        let _ = fs::remove_file(unfinished_marker(root));
         report.push(Mark::Done, "mig_nothing", "");
         report.ok = true;
         return report;
     }
     if (hooks.game_is_running)() {
         report.push(Mark::Fail, "close_game", "");
+        return report;
+    }
+    // The old Mod Manager window (Python from NMS.py\runtime) holds files open: deleting NMS.py
+    // would fail halfway. Nothing is backed up or changed while it runs.
+    if !legacy.py_open.is_empty() {
+        report.push(Mark::Fail, "mig_py_open", legacy.py_open.join(", "));
+        report.push(Mark::Kept, "mig_nothing_changed", "");
         return report;
     }
     if !paths::loader_dir(root).join("stock").is_dir() {
@@ -677,9 +799,15 @@ pub fn migrate(root: &Path, hooks: &Hooks) -> Report {
         Some(Ok(real)) => {
             let mut failed = Vec::new();
             delete_tree(&real, &mut failed);
+            let marker = unfinished_marker(root);
             if failed.is_empty() {
+                let _ = fs::remove_file(&marker);
                 report.push(Mark::Done, "mig_py_removed", fmt_size(legacy.nms_py_bytes));
             } else {
+                if let Some(parent) = marker.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::write(&marker, format!("{}\n", real.display()));
                 let names: Vec<String> = failed.iter().map(|p| rel_text(root, &un_verbatim(p))).collect();
                 report.push(Mark::Fail, "mig_py_partial", short_list(&names, 5));
                 all_ok = false;
@@ -736,6 +864,9 @@ pub fn cli(root: &Path, args: &[&str]) -> ExitCode {
     }
     println!("{}", i18n.t("mig_keep_head"));
     println!("  {}", i18n.t("mig_keep_text"));
+    if !legacy.py_open.is_empty() {
+        println!("! {}", py_open_text(&legacy, &i18n));
+    }
     if !yes {
         if !io::stdin().is_terminal() {
             eprintln!("{USAGE} (no terminal: add --yes)");
@@ -851,9 +982,12 @@ mod tests {
     fn must_not_strip() -> Result<String, String> {
         panic!("the launch option must not be touched")
     }
+    fn no_processes(_: &Path) -> Vec<String> {
+        Vec::new()
+    }
 
     fn quiet() -> Hooks<'static> {
-        Hooks { game_is_running: &not_running, launch_options: &no_options, strip_launch: &must_not_strip }
+        Hooks { game_is_running: &not_running, launch_options: &no_options, strip_launch: &must_not_strip, py_processes: &no_processes }
     }
 
     fn backup_of(report: &Report) -> PathBuf {
@@ -864,7 +998,7 @@ mod tests {
     fn detects_the_old_layout() {
         let root = fixture("detect");
         let options = || vec![OLD_OPTION.to_string()];
-        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &must_not_strip };
+        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &must_not_strip, py_processes: &no_processes };
         let legacy = detect(&root, &hooks);
         assert!(legacy.found());
         assert_eq!(legacy.nms_py.as_deref(), Some(root.join(NMS_PY).as_path()));
@@ -896,7 +1030,7 @@ mod tests {
             option.borrow_mut().retain(|o| !o.contains("NMS.py"));
             Ok("Steam account 111: launch option removed.".to_string())
         };
-        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &strip };
+        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &strip, py_processes: &no_processes };
         let report = migrate(&root, &hooks);
         let text = report.render(&I18n::new("en"));
         assert!(report.ok, "{text}");
@@ -966,7 +1100,7 @@ mod tests {
     #[test]
     fn refuses_while_the_game_runs() {
         let root = fixture("running");
-        let hooks = Hooks { game_is_running: &running, launch_options: &no_options, strip_launch: &must_not_strip };
+        let hooks = Hooks { game_is_running: &running, launch_options: &no_options, strip_launch: &must_not_strip, py_processes: &no_processes };
         let report = migrate(&root, &hooks);
         assert!(!report.ok && report.has("close_game"));
         assert!(root.join(NMS_PY).join("runtime").join("python.exe").is_file());
@@ -990,7 +1124,7 @@ mod tests {
         let root = fixture("steamfail");
         let options = || vec![OLD_OPTION.to_string()];
         let fail = || -> Result<String, String> { Err("Steam did not close".to_string()) };
-        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &fail };
+        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &fail, py_processes: &no_processes };
         let report = migrate(&root, &hooks);
         assert!(!report.ok);
         assert!(report.has("mig_steam_failed") && report.has("mig_py_kept_steam"));
@@ -1103,11 +1237,151 @@ mod tests {
         assert!(!report.ok && report.has("mig_py_partial"), "{text}");
         assert!(text.contains("python.exe"), "{text}");
         assert!(!root.join(NMS_PY).join("lib").exists(), "the rest is gone");
+        assert!(text.contains("Migrate now"), "the line says how to finish: {text}");
+        // Still in use: a second run says the same and deletes what it can, no other error.
+        let still = migrate(&root, &quiet());
+        let still_text = still.render(&I18n::new("en"));
+        assert!(!still.ok && still.has("mig_py_partial") && !still.has("mig_py_refused"), "{still_text}");
         drop(handle);
         // Once the file is free, running again finishes the job.
         let again = migrate(&root, &quiet());
         assert!(again.ok && !root.join(NMS_PY).exists(), "{}", again.render(&I18n::new("en")));
+        assert!(!unfinished_marker(&root).exists());
+        assert!(!detect(&root, &quiet()).found(), "the panel goes away");
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// The old window's working folder is NMS.py itself (or its last file sits outside `stock`
+    /// and `runtime`): the first run deletes everything else, so the layout check alone would
+    /// refuse the remains. The marker lets the second run finish.
+    #[cfg(windows)]
+    #[test]
+    fn second_run_finishes_after_stock_and_runtime_are_gone() {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        let root = fixture("rerun");
+        let option = RefCell::new(vec![OLD_OPTION.to_string()]);
+        let options = || option.borrow().clone();
+        let strip = || -> Result<String, String> {
+            option.borrow_mut().clear();
+            Ok("removed".to_string())
+        };
+        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &strip, py_processes: &no_processes };
+        let py = root.join(NMS_PY);
+        let held = py.join("lib").join("held.pyd");
+        write(&held, "dll");
+        // The folder itself is held like a process working directory (no delete sharing), and one
+        // file in lib is open without sharing.
+        let dir_handle = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1 | 2)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&py)
+            .unwrap();
+        let file_handle = fs::OpenOptions::new().read(true).share_mode(0).open(&held).unwrap();
+        let first = migrate(&root, &hooks);
+        let text = first.render(&I18n::new("en"));
+        assert!(!first.ok && first.has("mig_py_partial"), "{text}");
+        assert!(text.contains("held.pyd"), "names what is still in use: {text}");
+        assert!(!py.join("stock").exists() && !py.join("runtime").exists(), "{text}");
+        assert!(unfinished_marker(&root).is_file());
+        drop(file_handle);
+        drop(dir_handle);
+        // Second run after the partial one: backup folder, updated mods, moved settings and the
+        // stripped Steam option are all there already. It must finish, not refuse.
+        assert!(detect(&root, &hooks).found());
+        assert!(check_nms_py(&root, &py).is_ok());
+        let again = migrate(&root, &hooks);
+        let again_text = again.render(&I18n::new("en"));
+        assert!(again.ok && again.has("mig_py_removed") && again.has("mig_done"), "{again_text}");
+        assert!(!py.exists() && !unfinished_marker(&root).exists(), "{again_text}");
+        assert_ne!(again.backup, first.backup, "a fresh backup folder, the first one stays");
+        assert!(backup_of(&first).join("manifest.txt").is_file());
+        assert_eq!(mset::load(&root).language, "de");
+        assert!(!detect(&root, &hooks).found(), "the panel goes away");
+        // Without the marker an emptied folder still counts as foreign (never deleted blindly).
+        fs::create_dir_all(&py).unwrap();
+        assert_eq!(check_nms_py(&root, &py), Err("mig_why_layout"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn refuses_while_an_nms_py_program_runs() {
+        let root = fixture("pyopen");
+        let open = |dir: &Path| exes_inside(dir, &[dir.join("runtime").join("python.exe")]);
+        let hooks = Hooks { game_is_running: &not_running, launch_options: &no_options, strip_launch: &must_not_strip, py_processes: &open };
+        let legacy = detect(&root, &hooks);
+        assert_eq!(legacy.py_open, vec!["python.exe".to_string()]);
+        assert!(py_open_text(&legacy, &I18n::new("en")).contains("python.exe"));
+        let report = migrate(&root, &hooks);
+        let text = report.render(&I18n::new("en"));
+        assert!(!report.ok && report.has("mig_py_open") && report.has("mig_nothing_changed"), "{text}");
+        assert!(text.contains("python.exe") && text.contains("Migrate now"), "{text}");
+        assert!(report.backup.is_none() && !root.join("NMS.rs").join("backup").exists());
+        assert!(root.join(NMS_PY).join("stock").is_dir());
+        assert!(root.join("GAMEDATA/MODS/BiggerItemGrids/bigger_item_grids.py").is_file());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn exe_inside_check() {
+        let root = fixture("inside");
+        let py = root.join(NMS_PY);
+        let exe = py.join("runtime").join("python.exe");
+        write(&py.join("runtime").join("pythonw.exe"), "py");
+        // Inside, in any case, and both spellings of the same file count once.
+        let upper = PathBuf::from(exe.display().to_string().to_uppercase());
+        let found = exes_inside(&py, &[exe.clone(), upper, py.join("runtime").join("pythonw.exe")]);
+        assert_eq!(found, vec!["python.exe".to_string(), "pythonw.exe".to_string()]);
+        // Through `..` it still resolves inside.
+        let dotted = py.join("lib").join("..").join("runtime").join("python.exe");
+        assert_eq!(exes_inside(&py, &[dotted]), vec!["python.exe".to_string()]);
+        // Outside: the game, NMS.rs, a sibling whose name starts the same, another folder.
+        let twin = root.join("NMS.py2").join("python.exe");
+        write(&twin, "py");
+        let elsewhere = temp("inside-else").join("python.exe");
+        write(&elsewhere, "py");
+        let outside = [root.join("Binaries").join("NMS.exe"), twin, elsewhere.clone(), root.join("nms-rs.exe")];
+        assert!(exes_inside(&py, &outside).is_empty(), "{:?}", exes_inside(&py, &outside));
+        // The folder itself is not a program inside it; no folder, nothing inside.
+        assert!(exes_inside(&py, std::slice::from_ref(&py)).is_empty());
+        assert!(exes_inside(&root.join("missing"), &[exe]).is_empty());
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(elsewhere.parent().unwrap());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn exe_inside_check_resolves_junctions() {
+        let root = fixture("inside-link");
+        let py = root.join(NMS_PY);
+        let exe = py.join("runtime").join("python.exe");
+        // The game folder reached through a junction: the same program, another spelling.
+        let alias_base = temp("inside-alias");
+        let alias = alias_base.join("game");
+        junction(&alias, &root);
+        let via_alias = alias.join(NMS_PY).join("runtime").join("python.exe");
+        assert_eq!(exes_inside(&py, std::slice::from_ref(&via_alias)), vec!["python.exe".to_string()]);
+        assert_eq!(exes_inside(&alias.join(NMS_PY), &[exe]), vec!["python.exe".to_string()]);
+        // A junction inside NMS.py that leads out: a program there runs from elsewhere.
+        let away = temp("inside-away");
+        write(&away.join("tool.exe"), "x");
+        junction(&py.join("linked"), &away);
+        assert!(exes_inside(&py, &[py.join("linked").join("tool.exe")]).is_empty());
+        let _ = fs::remove_dir(py.join("linked"));
+        let _ = fs::remove_dir(&alias);
+        let _ = fs::remove_dir_all(&alias_base);
+        let _ = fs::remove_dir_all(&away);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn process_list_sees_this_test() {
+        // Our own process is skipped on purpose; the list itself must not be empty.
+        let all = running_exe_paths();
+        assert!(!all.is_empty());
+        assert!(all.iter().all(|p| p.is_absolute()), "{all:?}");
     }
 
     #[test]

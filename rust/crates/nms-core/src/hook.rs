@@ -23,7 +23,15 @@ impl Hook {
     /// # Safety
     /// `target` must be the first byte of a function whose signature matches `detour` exactly.
     pub unsafe fn new(name: &'static str, target: usize, detour: *const ()) -> Result<Self, String> {
-        let detour = RawDetour::new(target as *const (), detour).map_err(|e| format!("{name}: {e}"))?;
+        let detour = loop {
+            match RawDetour::new(target as *const (), detour) {
+                Ok(d) => break d,
+                // No trampoline room near the game code (Wine reserves the window around the
+                // image): give back one block held since boot and try again.
+                Err(retour::Error::OutOfMemory) if crate::mem::release_held_one() => continue,
+                Err(e) => return Err(format!("{name}: {e}")),
+            }
+        };
         Ok(Self { name, detour })
     }
 
@@ -40,7 +48,10 @@ impl Hook {
     ) -> Result<Self, String> {
         let hook = Self::new(name, target, detour)?;
         original.store(hook.original() as usize, std::sync::atomic::Ordering::Release);
-        hook.enable()?;
+        if let Err(e) = hook.enable() {
+            original.store(0, std::sync::atomic::Ordering::Release);
+            return Err(e);
+        }
         Ok(hook)
     }
 

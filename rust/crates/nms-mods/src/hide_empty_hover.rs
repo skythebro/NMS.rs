@@ -1,8 +1,9 @@
 //! Hide the empty-slot Modify hover (ported from Python).
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
+use nms_core::game::dispatch::{self, StateChange, Tick};
 use nms_core::hook::Hook;
 use nms_core::log::Log;
 use nms_core::mem::{self, readable, read_f32, read_ptr, read_u32, read_u8};
@@ -27,6 +28,32 @@ static BASICS_ORIG: AtomicUsize = AtomicUsize::new(0);
 static IN_EMPTY: AtomicBool = AtomicBool::new(false);
 static FILLED: AtomicBool = AtomicBool::new(false);
 static RUNTIME: OnceLock<Arc<HoverRuntime>> = OnceLock::new();
+/// Snapshot of the two hide switches, so the hover hook never takes the settings lock.
+static HIDE_INV: AtomicBool = AtomicBool::new(true);
+static HIDE_TECH: AtomicBool = AtomicBool::new(true);
+
+/// A state change (load, death, galaxy map, quit to menu): forget any half-seen hover and log the
+/// next "hidden" again, so each load logs once.
+fn on_state_change(_: &StateChange) {
+    STATE_CHANGES.fetch_add(1, Ordering::Relaxed);
+    IN_EMPTY.store(false, Ordering::Release);
+    FILLED.store(false, Ordering::Release);
+    if let Some(rt) = RUNTIME.get() {
+        rt.hiding.store(false, Ordering::Release);
+        rt.bar_logged.store(false, Ordering::Release);
+    }
+}
+
+/// Frame of the fully-booted callback (0 = not seen). Logged with the next "hidden" line, so the
+/// callback itself does no file I/O on the main thread.
+static BOOTED_AT: AtomicU64 = AtomicU64::new(0);
+/// State changes seen, reported the same way.
+static STATE_CHANGES: AtomicU64 = AtomicU64::new(0);
+
+/// Once, at the main menu: proof that the lifecycle callbacks reach the mod.
+fn on_fully_booted(t: &Tick) {
+    BOOTED_AT.store(t.frame.max(1), Ordering::Relaxed);
+}
 
 struct HookAddrs {
     popup_rva: usize,
@@ -38,7 +65,6 @@ struct HookAddrs {
 struct HoverRuntime {
     log: Arc<Log>,
     status: Arc<Mutex<String>>,
-    settings: Arc<Mutex<Settings>>,
     hash_va: usize,
     lookup_va: usize,
     ready: AtomicBool,
@@ -91,11 +117,15 @@ impl HideEmptyHover {
             }),
         )));
         let write_logs = settings.lock().map(|s| s.is_not_false("write_logs")).unwrap_or(false);
+        if let Ok(s) = settings.lock() {
+            HIDE_INV.store(s.is_not_false("hide_empty_hover"), Ordering::Release);
+            HIDE_TECH.store(s.is_not_false("hide_tech_hover"), Ordering::Release);
+        }
         let log = Arc::new(Log::open(&dir.join("hide_empty_hover.log"), write_logs));
         let status = Arc::new(Mutex::new("Off, see log".to_string()));
 
         let (popup_hook, basics_hook) = match locate(&ctx.image) {
-            Ok(addrs) => install_hooks(&ctx.image, addrs, log.clone(), status.clone(), settings.clone()),
+            Ok(addrs) => install_hooks(&ctx.image, addrs, log.clone(), status.clone()),
             Err(reason) => {
                 log.info(&format!("Empty-slot hover not changed: {reason}"));
                 if let Ok(mut s) = status.lock() {
@@ -104,6 +134,14 @@ impl HideEmptyHover {
                 (None, None)
             }
         };
+
+        // Lifecycle callbacks are optional: without them the mod works as before (the reset only
+        // makes the "hidden" log line repeat once per load).
+        let lifecycle = dispatch::on_state_change("HideEmptyHover", on_state_change)
+            .and_then(|_| dispatch::on_fully_booted("HideEmptyHover", on_fully_booted));
+        if let Err(e) = lifecycle {
+            log.info(&format!("lifecycle callbacks not registered: {e}"));
+        }
 
         let hooks_ready = popup_hook.is_some() && basics_hook.is_some();
         if hooks_ready {
@@ -153,6 +191,8 @@ impl HideEmptyHover {
         if settings.set(key, json!(hide)).is_err() {
             return;
         }
+        let flag = if key == "hide_tech_hover" { &HIDE_TECH } else { &HIDE_INV };
+        flag.store(hide, Ordering::Release);
         let label = if key == "hide_tech_hover" {
             "tech"
         } else {
@@ -213,14 +253,12 @@ fn install_hooks(
     addrs: HookAddrs,
     log: Arc<Log>,
     status: Arc<Mutex<String>>,
-    settings: Arc<Mutex<Settings>>,
 ) -> (Option<Hook>, Option<Hook>) {
     let hash_va = addrs.hash_rva.map(|r| image.va(r)).unwrap_or(0);
     let lookup_va = addrs.lookup_rva.map(|r| image.va(r)).unwrap_or(0);
     let runtime = Arc::new(HoverRuntime {
         log: log.clone(),
         status: status.clone(),
-        settings,
         hash_va,
         lookup_va,
         ready: AtomicBool::new(true),
@@ -264,21 +302,16 @@ impl HoverRuntime {
 
     fn try_after_empty(&self, page: u64, current_inventory: u64) -> Result<(), String> {
         let tech = is_tech_store(current_inventory);
-        let key = if tech {
-            "hide_tech_hover"
-        } else {
-            "hide_empty_hover"
-        };
-        let on = self
-            .settings
-            .lock()
-            .map_err(|_| "settings lock poisoned".to_string())?
-            .is_not_false(key);
+        let on = if tech { HIDE_TECH.load(Ordering::Acquire) } else { HIDE_INV.load(Ordering::Acquire) };
         if !on {
             return Ok(());
         }
         if hide_layers(self, page)? && !self.hiding.swap(true, Ordering::AcqRel) {
-            self.log.info("Empty-slot hover hidden");
+            self.log.info(&format!(
+                "Empty-slot hover hidden (lifecycle: fully booted at frame {}, {} state changes so far)",
+                BOOTED_AT.load(Ordering::Relaxed),
+                STATE_CHANGES.load(Ordering::Relaxed)
+            ));
         }
         Ok(())
     }

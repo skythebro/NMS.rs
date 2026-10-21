@@ -66,6 +66,9 @@ pub struct SlotsRuntime {
     tab_scroll: HashMap<(u64, &'static str), f32>,
     layer_store: HashMap<u64, u64>,
     tab_key: u64,
+    /// The page's screen id at the last slot draw. Only for the restore log lines: the exosuit
+    /// upgrade station bug report needs to show which screen the restore happened on.
+    last_screen: Option<i32>,
     hold_zero: bool,
     filter_hover: Option<FilterHover>,
     filter_stick: Option<i32>,
@@ -142,6 +145,7 @@ impl SlotsRuntime {
             tab_scroll: HashMap::new(),
             layer_store: HashMap::new(),
             tab_key: 0,
+            last_screen: None,
             hold_zero: false,
             filter_hover: None,
             filter_stick: None,
@@ -365,7 +369,10 @@ impl SlotsRuntime {
                 return;
             }
             if unsafe { mem::write(address, saved) } {
-                self.log.info(&format!("Filter: restored {saved} for store {tab:#x}"));
+                self.log.info(&format!(
+                    "Filter: restored {saved} for store {tab:#x} (screen {})",
+                    self.screen_text()
+                ));
             }
             return;
         }
@@ -378,6 +385,10 @@ impl SlotsRuntime {
             self.hold_zero = false;
         }
         self.store_filter(page, tab);
+    }
+
+    fn screen_text(&self) -> String {
+        self.last_screen.map_or_else(|| "?".to_string(), |v| v.to_string())
     }
 
     fn page_screen(&self, page: u64) -> Option<i32> {
@@ -528,8 +539,11 @@ impl SlotsRuntime {
             };
             if write_layer_y(layer as usize, y).is_ok() {
                 self.tab_scroll.insert(key, y);
-                self.log
-                    .info(&format!("Scroll: restored {} for store {store:#x} {kind}", fixed_f32(y)));
+                self.log.info(&format!(
+                    "Scroll: restored {} for store {store:#x} {kind} (screen {})",
+                    fixed_f32(y),
+                    self.screen_text()
+                ));
                 return Some(y);
             }
             return None;
@@ -943,6 +957,9 @@ impl SlotsRuntime {
         };
         if self.drawing != 0 && layer as usize == self.container_layer {
             self.sort_target = store;
+        }
+        if self.remember_filter || self.remember_scroll {
+            self.last_screen = if (page as usize) < MIN_ADDR { None } else { self.page_screen(page) };
         }
         if self.remember_filter {
             self.remember_filter_tab(page, store, render_height, slot_width);

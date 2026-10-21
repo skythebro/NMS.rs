@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "MOD警告を非表示",
+  "desc.NMS.rs.hide_mod_warning": "ゲーム起動時のMOD導入警告画面をスキップします。MODは引き続き読み込まれます。次回の起動から有効です。",
   "label.SphereSizedMining.enabled": "採掘量を拡大",
   "desc.SphereSizedMining.enabled": "地形マニピュレーターの1回ごとの資源上限を、中と大の球体で引き上げます。オフにするとすぐにバニラの上限に戻ります。",
   "label.SphereSizedMining.scaling": "上限の増え方",

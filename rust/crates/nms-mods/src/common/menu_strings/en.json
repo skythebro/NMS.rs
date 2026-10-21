@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "Hide mod warning",
+  "desc.NMS.rs.hide_mod_warning": "Skips the \"mods are installed\" warning screen at game start. Mods still load. Takes effect at the next game start.",
   "label.SphereSizedMining.enabled": "Scale mining yield",
   "desc.SphereSizedMining.enabled": "Raises the Terrain Manipulator's per-dig resource caps for the medium and large spheres. Off puts the vanilla caps back at once.",
   "label.SphereSizedMining.scaling": "Yield grows with",

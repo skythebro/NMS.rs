@@ -436,6 +436,19 @@ impl Manager {
         }
     }
 
+    /// While an NMS.py folder is there, see on the game-running cadence whether the old Mod
+    /// Manager window (a program from inside NMS.py) is still open, so the notice comes and goes.
+    fn recheck_py_open(&mut self) {
+        if self.job.is_some() || self.legacy_rx.is_some() {
+            return;
+        }
+        if let Some(legacy) = self.legacy.as_mut() {
+            if let Some(dir) = legacy.nms_py.clone() {
+                legacy.py_open = migrate::py_processes(&dir);
+            }
+        }
+    }
+
     fn legacy_found(&self) -> bool {
         self.legacy.as_ref().is_some_and(Legacy::found)
     }
@@ -469,6 +482,11 @@ impl Manager {
         ui.add(egui::Label::new(egui::RichText::new(self.i18n.t("mig_keep_head")).strong().color(pal::SUCCESS)).wrap());
         ui.add(egui::Label::new(self.i18n.t("mig_keep_text")).wrap());
         ui.add_space(6.0);
+        if !legacy.py_open.is_empty() {
+            let note = egui::RichText::new(migrate::py_open_text(legacy, &self.i18n)).strong().color(pal::WARN);
+            ui.add(egui::Label::new(note).wrap());
+            ui.add_space(4.0);
+        }
         // Long labels (de, ru, ko) each get a line of their own and wrap inside the window.
         let button = wide_button(self.i18n.t("mig_button"), Look::Primary);
         go = ui.add_enabled(!running, button).clicked();
@@ -1617,6 +1635,7 @@ impl Manager {
         if stale {
             self.running = files::game_is_running();
             self.running_checked = Some(std::time::Instant::now());
+            self.recheck_py_open();
         }
         ctx.request_repaint_after(RUNNING_CHECK_EVERY);
         self.poll_job();
@@ -2458,6 +2477,7 @@ mod tests {
             python_mods: ["BiggerItemGrids", "CraftFromStorage", "HideEmptyHover", "QuickRecharge"].iter().map(|s| (*s).to_string()).collect(),
             old_option: true,
             wrappers: vec![root.join("NMS.py Setup.cmd")],
+            py_open: Vec::new(),
         };
         let line = |mark, key, detail: &str| Line { mark, key, detail: detail.into(), detail_key: None };
         let report = Report {
@@ -2625,6 +2645,7 @@ mod tests {
             python_mods: mods_with_py.iter().map(|s| (*s).to_string()).collect(),
             old_option: true,
             wrappers: vec![root.join("NMS.py Setup.cmd")],
+            py_open: Vec::new(),
         };
         let line = |mark, key, detail: &str| Line { mark, key, detail: detail.into(), detail_key: None };
         let report = Report {

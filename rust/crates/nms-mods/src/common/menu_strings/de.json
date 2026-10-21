@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "Mod-Warnung ausblenden",
+  "desc.NMS.rs.hide_mod_warning": "Überspringt beim Spielstart den Warnbildschirm zu installierten Mods. Mods werden weiter geladen. Wirkt ab dem nächsten Spielstart.",
   "label.SphereSizedMining.enabled": "Abbauertrag skalieren",
   "desc.SphereSizedMining.enabled": "Hebt die Ressourcengrenzen pro Grabung des Geländemanipulators für die mittlere und große Kugel an. Aus stellt die Vanilla-Grenzen sofort wieder her.",
   "label.SphereSizedMining.scaling": "Ertrag wächst mit",

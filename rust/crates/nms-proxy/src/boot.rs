@@ -10,6 +10,9 @@ use nms_core::process::ProcessImage;
 use nms_core::{paths, Registry};
 
 const PREPARE_LOG_PREFIX: &str = "prepare:";
+/// 128 blocks of 1 MB: room for the trampolines (~30 hooks) and caves, reserved not committed.
+const HOLD_BLOCK: usize = 0x10_0000;
+const HOLD_BLOCKS: usize = 128;
 
 pub fn run() {
     let exe = std::env::current_exe().unwrap_or_default();
@@ -25,8 +28,8 @@ pub fn run() {
         log.info("NMS.rs\\disabled exists: staying vanilla");
         return;
     }
-    merge_ui(&log, &dir, spawn_prepare);
-
+    // The image snapshot comes first (patterns are searched in it, before any hook changes code),
+    // then the per-frame hook, so it lands as early as possible (`RESEARCH-lifecycle-and-context.md` 6.2).
     let image = match ProcessImage::current() {
         Ok(i) => i,
         Err(e) => {
@@ -35,7 +38,17 @@ pub fn run() {
         }
     };
     log.info(&format!("image base {:#x}", image.base()));
+    // Before the UI merge and the hooks: under Wine the space around the image is taken about
+    // 1.7 s after start, and hooks then fail with "Cannot allocate memory". Blocks are handed
+    // back one at a time when a hook or cave finds no room (nms_core::mem::release_held_one).
+    let held = nms_core::mem::hold_near(image.base(), HOLD_BLOCK, HOLD_BLOCKS);
+    log.info(&format!("near-code memory held: {held} of {HOLD_BLOCKS} blocks of {} MB", HOLD_BLOCK >> 20));
+    crate::loader_settings::apply_at_boot(&image, &dir, &log);
+    start_lifecycle(&image, &dir, &log);
+    merge_ui(&log, &dir, spawn_prepare);
+
     let mut registry = Registry::default();
+    registry.add(Box::new(crate::loader_settings::LoaderSettings::new(&dir, image.clone(), log.clone())));
     // Dev-only: the self-test enables and disables a hook live, so it never ships.
     #[cfg(feature = "selftest")]
     registry.add(Box::new(crate::selftest::SelfTest::new(&dir, image.clone(), log.clone())));
@@ -48,6 +61,31 @@ pub fn run() {
     let pipe_log = log.clone();
     nms_core::ipc::serve(registry, move |m| pipe_log.info(m));
     log.info("settings pipe ready");
+}
+
+/// Resolve the game context and hook `cGcApplication::Update`. Any failure is logged and the
+/// mods still load; `NMS.rs\lifecycle_off` keeps the context but skips the per-frame hook.
+fn start_lifecycle(image: &ProcessImage, loader: &Path, log: &Arc<Log>) {
+    let game = match nms_core::game::live::init(image) {
+        Ok(g) => g,
+        Err(e) => {
+            log.info(&format!("game context off: {e}"));
+            return;
+        }
+    };
+    log.info(&game.layout().describe());
+    if loader.join("lifecycle_off").exists() {
+        log.info("NMS.rs\\lifecycle_off exists: no per-frame hook");
+        return;
+    }
+    match nms_core::game::live::install_lifecycle(image, game, log.clone()) {
+        Err(e) => log.info(&format!("lifecycle off: {e}")),
+        // Dev-only: the automatic lifecycle check never ships.
+        #[cfg(feature = "selftest")]
+        Ok(()) => crate::lifecycle_test::start(log.clone()),
+        #[cfg(not(feature = "selftest"))]
+        Ok(()) => {}
+    }
 }
 
 fn spawn_prepare(mut cmd: Command) -> io::Result<Output> {

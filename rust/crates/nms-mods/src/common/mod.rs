@@ -1,5 +1,6 @@
 //! Code shared by more than one mod.
 
+pub mod context;
 pub mod custom_filter;
 pub mod hooks;
 pub mod descriptions;

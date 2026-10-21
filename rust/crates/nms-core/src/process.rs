@@ -48,6 +48,13 @@ impl ProcessImage {
         Ok(Self { base, size, exec, snapshot: Arc::new(snapshot) })
     }
 
+    /// A view with base 0 over the whole user address space (RVA = address), for tests that patch
+    /// code they allocated themselves.
+    #[cfg(test)]
+    pub(crate) fn for_test_absolute() -> Self {
+        Self { base: 0, size: 0x7FFF_FFFF_FFFF, exec: Vec::new(), snapshot: Arc::new(Vec::new()) }
+    }
+
     pub fn base(&self) -> usize {
         self.base
     }
@@ -64,24 +71,25 @@ impl ProcessImage {
     ///
     /// Precondition: no other thread writes the other bytes of that 8-byte word at the same time
     /// (the word is read, spliced and stored back). Mods call this from one place per site, under
-    /// their own lock, as with `write`. A failed protection restore is reported as an error after
+    /// their own lock, as with `write`. Errors are static strings: this runs while other threads are
+    /// paused (`jump`), where nothing may allocate. A failed protection restore is reported as an error after
     /// the store (the bytes are written; the page stays writable).
-    pub fn write_atomic(&mut self, rva: usize, bytes: &[u8]) -> Result<(), String> {
+    pub fn write_atomic(&mut self, rva: usize, bytes: &[u8]) -> Result<(), &'static str> {
         let at = self.base + rva;
         let word = at & !7;
         let off = at - word;
         if bytes.is_empty() || off + bytes.len() > 8 {
-            return Err("not inside one aligned 8-byte word".into());
+            return Err("not inside one aligned 8-byte word");
         }
         if word < self.base || word + 8 > self.base + self.size {
-            return Err("write outside the image".into());
+            return Err("write outside the image");
         }
         let mut old = 0u32;
         // SAFETY: the 8-byte word is inside the image and 8-aligned; protection is restored right
         // after the store. The other bytes of the word are re-stored with the value just read.
         unsafe {
             if VirtualProtect(word as _, 8, PAGE_EXECUTE_READWRITE, &mut old) == 0 {
-                return Err("could not unprotect the code".into());
+                return Err("could not unprotect the code");
             }
             let cell = &*(word as *const std::sync::atomic::AtomicU64);
             let mut value = cell.load(std::sync::atomic::Ordering::Acquire).to_le_bytes();
@@ -91,7 +99,7 @@ impl ProcessImage {
             let restored = VirtualProtect(word as _, 8, old, &mut was) != 0;
             FlushInstructionCache(GetCurrentProcess(), word as _, 8);
             if !restored {
-                return Err("written, but the code protection could not be restored".into());
+                return Err("written, but the code protection could not be restored");
             }
         }
         Ok(())
@@ -104,10 +112,10 @@ impl Code for ProcessImage {
     }
 
     fn read(&self, rva: usize, len: usize) -> Option<Vec<u8>> {
-        if rva + len > self.size {
+        if rva + len > self.size || !crate::mem::readable(self.base + rva, len) {
             return None;
         }
-        // SAFETY: inside the mapped image; image pages are readable.
+        // SAFETY: inside the mapped image and checked readable (gaps between sections are not mapped).
         Some(unsafe { std::slice::from_raw_parts((self.base + rva) as *const u8, len) }.to_vec())
     }
 

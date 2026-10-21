@@ -3,6 +3,7 @@
 use crate::ModSigs;
 
 pub mod bigger_item_grids;
+pub mod loader;
 pub mod craft_from_storage;
 pub mod galaxy_map_filters;
 pub mod hide_empty_hover;
@@ -18,6 +19,7 @@ pub mod tool_mode_binds;
 pub mod trade_ui_tweaks;
 
 pub const ALL: &[ModSigs] = &[
+    loader::TABLE,
     hide_empty_hover::TABLE,
     sphere_sized_mining::TABLE,
     smaller_inventory_slots::TABLE,

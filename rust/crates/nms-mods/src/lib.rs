@@ -59,10 +59,19 @@ pub fn register(registry: &mut Registry, ctx: &Ctx) {
     for (name, py, make) in MODS {
         if python_copy(&ctx.root, name, py) {
             registry.add(Box::new(Disabled::new(name)));
+        } else if !is_installed(&ctx.root, name) {
+            registry.add(Box::new(Disabled::parked(name)));
         } else {
             registry.add(make(ctx));
         }
     }
+}
+
+/// The mod's folder in `GAMEDATA\MODS` is the on/off switch (the manager's Install and Park move
+/// it). A parked or never installed mod must not hook anything, and must not write its settings:
+/// saving them would recreate the folder and the manager would show the mod as on again.
+pub fn is_installed(root: &Path, mod_name: &str) -> bool {
+    paths::mod_dir(root, mod_name).is_dir()
 }
 
 /// True while the Python copy of a mod is installed: both loaders must never hook the same function.
@@ -73,11 +82,17 @@ pub fn python_copy(root: &Path, mod_name: &str, py_file: &str) -> bool {
 /// Stands in for a ported mod whose Python copy is still installed.
 pub struct Disabled {
     name: &'static str,
+    reason: &'static str,
 }
 
 impl Disabled {
     pub fn new(name: &'static str) -> Self {
-        Self { name }
+        Self { name, reason: "Off: Python copy present in GAMEDATA\\MODS" }
+    }
+
+    /// The mod's folder is not in `GAMEDATA\MODS` (parked or not installed).
+    pub fn parked(name: &'static str) -> Self {
+        Self { name, reason: "Off: parked (not in GAMEDATA\\MODS)" }
     }
 }
 
@@ -97,14 +112,11 @@ impl GameMod for Disabled {
     }
 
     fn get(&self, key: &str) -> Option<Value> {
-        (key == "status").then(|| json!("Off: Python copy present in GAMEDATA\\MODS"))
+        (key == "status").then(|| json!(self.reason))
     }
 
     fn set(&self, key: &str, _value: &Value) -> Result<String, String> {
-        Err(format!(
-            "{} is off while its Python copy is installed ({key} not changed)",
-            self.name
-        ))
+        Err(format!("{} is off ({key} not changed): {}", self.name, self.reason))
     }
 }
 
@@ -141,5 +153,19 @@ mod tests {
             .unwrap()
             .contains("Python copy"));
         assert!(d.set("write_logs", &json!(true)).is_err());
+    }
+
+    #[test]
+    fn parked_mod_is_off_and_creates_no_folder() {
+        let root = std::env::temp_dir().join(format!("nms-mods-parked-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(!is_installed(&root, "RefinerGuard"));
+        let d = Disabled::parked("RefinerGuard");
+        assert!(d.get("status").unwrap().as_str().unwrap().contains("parked"));
+        assert!(d.set("write_logs", &json!(true)).is_err());
+        assert!(!paths::mod_dir(&root, "RefinerGuard").exists());
+        std::fs::create_dir_all(paths::mod_dir(&root, "RefinerGuard")).unwrap();
+        assert!(is_installed(&root, "RefinerGuard"));
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

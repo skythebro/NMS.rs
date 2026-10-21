@@ -44,6 +44,13 @@ choices in the game's language, with Apply, Cancel changes and Reset. Every swit
 including Write log. Settings are saved in `GAMEDATA\MODS\<Mod>\<module>.json`; a new install
 writes its own defaults on first start, and your settings are never overwritten by an update.
 
+A mod that is parked (its folder is not in `GAMEDATA\MODS`) is off: its code does not hook the
+game, and the page shows "Off: parked". Install it in the manager to turn it on.
+
+The **NMS.rs** section has the loader's own switch, **Hide mod warning** (on by default): it skips
+the game's "You appear to be running a modded version" screen at start. The tamper warning and the
+crash dialog's Disable Mods button stay as in vanilla.
+
 ## Sizes
 
 Bigger Item Grids and Smaller Inventory Slots change game UI files, so their size is fixed by
@@ -80,7 +87,8 @@ Many UI mods ship an AMUMSS lua script. When the game starts, NMS.rs merges ever
 
 ## Coming from version 3 (NMS.py)
 
-The manager finds an old NMS.py setup and asks first. **Migrate now**:
+The manager finds an old NMS.py setup and asks first. Close the old NMS.py Mod Manager window
+before you press **Migrate now** (the manager waits while it is open). **Migrate now**:
 
 1. backs up your settings and edited files to `NMS.rs\backup\migrate-<time>`;
 2. carries the language, merge order, sizes and parked mods over to `NMS.rs`;

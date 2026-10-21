@@ -1,4 +1,6 @@
 {
+  "label.NMS.rs.hide_mod_warning": "Ukryj ostrzeżenie o modach",
+  "desc.NMS.rs.hide_mod_warning": "Pomija ekran ostrzeżenia o zainstalowanych modach przy uruchamianiu gry. Mody nadal się wczytują. Działa od następnego uruchomienia.",
   "label.SphereSizedMining.enabled": "Skaluj urobek",
   "desc.SphereSizedMining.enabled": "Podnosi limity surowców na jeden wykop Manipulatora terenu dla średniej i dużej kuli. Wyłączone od razu przywraca limity vanilla.",
   "label.SphereSizedMining.scaling": "Wzrost według",

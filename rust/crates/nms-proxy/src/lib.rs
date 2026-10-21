@@ -8,6 +8,9 @@
 #![cfg(windows)]
 
 mod boot;
+mod loader_settings;
+#[cfg(feature = "selftest")]
+mod lifecycle_test;
 #[cfg(feature = "selftest")]
 mod selftest;
 mod xinput;
