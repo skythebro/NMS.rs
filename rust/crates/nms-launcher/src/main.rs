@@ -65,7 +65,12 @@ pub(crate) fn install(root: &Path, force: bool) -> Result<String, String> {
     }
     let dst = root.join("Binaries").join(DLL);
     if dst.is_file() && !is_ours(&dst) && !force {
-        return Err(format!("{} already holds another {DLL}; not replacing it (use --force)", dst.display()));
+        // Snap Angles ships an xinput and a winmm version; only the winmm one runs beside NMS.rs.
+        return Err(format!(
+            "{} already holds another {DLL}; not replacing it (use --force). If it belongs to another \
+             mod, install that mod's winmm.dll version instead (Snap Angles has one).",
+            dst.display()
+        ));
     }
     std::fs::create_dir_all(paths::loader_dir(root).join("logs")).map_err(|e| e.to_string())?;
     std::fs::copy(&src, &dst).map_err(|e| format!("copy failed (is the game running?): {e}"))?;
@@ -156,7 +161,7 @@ fn main() -> ExitCode {
         (["play", cmd @ ..], Some(r)) => return play::cli_play(r, cmd),
         (["prepare"], Some(r)) => return play::cli_prepare(r),
         (["pack-logs"], Some(r)) => files::pack_logs(r).map(|path| {
-            let _ = nms_core::spawn::gui("explorer.exe").arg(format!("/select,{}", path.display())).spawn();
+            let _ = nms_core::spawn::reveal(&path);
             path.display().to_string()
         }),
         (["conflicts"], Some(r)) => {

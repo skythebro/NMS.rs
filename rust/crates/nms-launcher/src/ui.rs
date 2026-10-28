@@ -673,7 +673,7 @@ impl Manager {
                     self.start_job(Area::Settings, label, |root| {
                         files::pack_logs(root).map(|path| {
                             // Shows the new zip in Explorer so it can be sent right away.
-                            let _ = spawn::gui("explorer.exe").arg(format!("/select,{}", path.display())).spawn();
+                            let _ = spawn::reveal(&path);
                             format!("{}: {}", "Logs", path.display())
                         })
                     });

@@ -51,6 +51,28 @@ pub fn gui<S: AsRef<OsStr>>(program: S) -> Command {
     cmd
 }
 
+/// The `explorer.exe` command line that opens `path`'s folder with `path` selected.
+///
+/// Explorer only reads `/select,"<path>"`. `Command::arg` quotes an argument with a space as a
+/// whole (`"/select,<path>"`), and Explorer then ignores the switch and opens Documents (any game
+/// folder has spaces: `No Man's Sky`). So the argument is passed raw.
+pub fn reveal_arg(path: &std::path::Path) -> String {
+    format!("/select,\"{}\"", path.display())
+}
+
+/// Open Explorer on `path`'s folder with `path` selected (Windows; a plain spawn elsewhere).
+pub fn reveal(path: &std::path::Path) -> std::io::Result<std::process::Child> {
+    let mut cmd = gui("explorer.exe");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.raw_arg(reveal_arg(path));
+    }
+    #[cfg(not(windows))]
+    cmd.arg(path);
+    cmd.spawn()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,6 +152,15 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[test]
+    fn reveal_quotes_only_the_path() {
+        let path = Path::new(r"F:\SteamLibrary\steamapps\common\No Man's Sky\NMS.rs\logs\nms-rs-logs.zip");
+        assert_eq!(
+            reveal_arg(path),
+            r#"/select,"F:\SteamLibrary\steamapps\common\No Man's Sky\NMS.rs\logs\nms-rs-logs.zip""#
+        );
+    }
+
     #[test]
     fn hidden_child_runs_and_output_is_captured() {
         let out = command("cmd").args(["/c", "echo ok"]).output().expect("cmd /c echo ok");
