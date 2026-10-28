@@ -4,32 +4,40 @@ use crate::{CodePatch, ModSigs, Sig, SigUse};
 
 pub const SHOP_Q: &str = "44 88 4C 24 20 4C 89 44 24 18 48 89 54 24 10 48 89 4C 24 08 \
 55 53 56 57 41 54 41 55 41 56 41 57";
-pub const SHOP_BUYFOR: &str = "41 B8 20 00 00 00 48 8D 95 50 01 00 00 41 8B CC E8 ? ? ? ? \
-C6 85 60 0A 00 00 00";
-pub const SHOP_LIST: &str = "48 8D 15 ? ? ? ? 44 8B 45 00 49 8B CF 41 B9 06 00 00 00";
+/// Build 183791: rbp frame slots moved (0x150 -> 0x140, 0xA60 -> 0xA50). E8 still at +16.
+pub const SHOP_BUYFOR: &str = "41 B8 20 00 00 00 48 8D 95 40 01 00 00 41 8B CC E8 ? ? ? ? \
+C6 85 50 0A 00 00 00";
+/// List-step `lea rdx, [rip+disp]` at +0. Build 183791: page register r15 -> r13 and the r8d load moved
+/// before the lea. The following `mov eax, [rip]` reads the same dword; `+0x143D8` is the shop table.
+pub const SHOP_LIST: &str = "48 8D 15 ? ? ? ? 41 B9 06 00 00 00 49 8B CD E8 ? ? ? ? 8B 05 ? ? ? ? \
+49 8D 9D D8 43 01 00";
 pub const SHOP_PAGE: &str = "48 89 5C 24 08 48 89 6C 24 10 4C 89 44 24 18 56 57 41 56 \
 48 83 EC 40 65 48 8B 04 25 58 00 00 00";
 pub const SHOP_WALLET: &str = "48 8B 05 ? ? ? ? 48 05 70 0E 00 00 C3";
 pub const SHOP_HAS_INV: &str = "48 83 EC 28 48 81 C1 00 09 00 00 41 B8 FF FF FF FF E8";
 pub const SHOP_HAS_GLOBAL: &str = "48 8B 0D ? ? ? ? 33 D2 45 8B 67 0C 48 81 C1 40 B9 00 00 33 DB E8";
 pub const SHOP_INV_CLEAR: &str = "40 57 48 83 EC 20 48 83 79 20 00 48 8B F9 74 40";
-pub const SHOP_CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 44 4C 01 00 00";
+pub const SHOP_CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 84 4C 01 00 00";
 pub const SHOP_TOGGLE: &str = "48 8B 0D ? ? ? ? 41 B9 FF FF FF FF 41 B8 01 00 00 00 \
 48 8B 89 ? ? ? ? 48 8B 11 4C 8B 52 20 BA D8 00 00 00";
 pub const SHOP_CHOICES: &str = "89 54 24 10 48 89 4C 24 08 55 53 56 57 41 57 48 8B EC 48 81 EC 80 00 00 00 \
 49 8B 40 08 49 8D 70 08 49 8B D8 41 0F B6 F9";
-pub const SHOP_BASE: &str = "4C 8B 0D ? ? ? ? 8B 05 ? ? ? ? 4C 89 7D 68 4C 89 7D 70 44 88 7D 90 4D 8D 14 41 4D 3B CA 74 ? \
-41 BB ? ? ? ? 41 0F B7 01 48 8D 8D E0 02 00 00 66 89 85 E0 02 00 00 E8 ? ? ? ? 83 F8 10 77 06 \
-41 0F A3 C3 72 0B 49 83 C1 02 4D 3B CA 75 D5 EB 1F 41 0F B7 01 4C 8D 45 68 48 8D 95 E0 02 00 00 \
-66 89 85 E0 02 00 00 E8";
+/// Build 183791: a 5-byte `mov [rsp+disp8], r13b` and a 10-byte nop moved the loop, so the read offsets in
+/// `inv.rs` (base types imm, object type call, base chests call) moved with it. Fixed length on purpose.
+pub const SHOP_BASE: &str = "4C 8B 0D ? ? ? ? 8B 05 ? ? ? ? 4C 89 ? ? 4C 89 ? ? 44 88 ? ? ? 4D 8D 14 41 4D 3B CA 74 ? \
+41 BB ? ? ? ? 66 66 0F 1F 84 00 00 00 00 00 41 0F B7 01 48 8D 8D E0 02 00 00 66 89 85 E0 02 00 00 \
+E8 ? ? ? ? 83 F8 10 77 06 41 0F A3 C3 72 0B 49 83 C1 02 4D 3B CA 75 D5 EB ? 41 0F B7 01 4C 8D 45 ? \
+48 8D 95 E0 02 00 00 66 89 85 E0 02 00 00 E8";
 pub const SHOP_VIEW: &str = "89 54 24 10 48 83 EC 28 48 8B 01 4C 8B 08 49 63 81 18 0B 00 00 83 F8 FF 74 36 4C 8B D0";
 
 const INV_STORE_0_SIG: &str = "49 8D 8E D8 43 01 00 E8 ? ? ? ? 41 C7 47 0C 00 00 00 00";
 const INV_STORE_1_SIG: &str = "49 8D 8E D8 43 01 00 E8 ? ? ? ? 41 C7 47 0C 04 00 00 00";
 const INV_STORE_2_SIG: &str = "49 8D 8E D8 43 01 00 E8 ? ? ? ? 41 C7 47 0C 07 00 00 00";
-const INV_STORE_3_SIG: &str = "48 81 C1 D8 43 01 00 E8 ? ? ? ? 48 8B 44 24 68 C7 40 0C 00 00 00 00";
-const INV_STORE_4_SIG: &str = "48 81 C1 D8 43 01 00 E8 ? ? ? ? 48 8B 44 24 68 C7 40 0C 04 00 00 00";
-const INV_STORE_5_SIG: &str = "48 81 C1 D8 43 01 00 E8 ? ? ? ? 48 8B 44 24 68 C7 40 0C 07 00 00 00";
+// Stores 3..5, build 183791: the kind-block pointer moved from [rsp+0x68] to [rbp-0x78] (4-byte load),
+// so the 7-byte store is now at +16. Same store, same NOPs.
+const INV_STORE_3_SIG: &str = "48 81 C1 D8 43 01 00 E8 ? ? ? ? 48 8B 45 88 C7 40 0C 00 00 00 00";
+const INV_STORE_4_SIG: &str = "48 81 C1 D8 43 01 00 E8 ? ? ? ? 48 8B 45 88 C7 40 0C 04 00 00 00";
+const INV_STORE_5_SIG: &str = "48 81 C1 D8 43 01 00 E8 ? ? ? ? 48 8B 45 88 C7 40 0C 07 00 00 00";
 
 pub const SHOP_INV_STORE_0: CodePatch = CodePatch {
     label: "Shop inv store 0",
@@ -55,21 +63,21 @@ pub const SHOP_INV_STORE_2: CodePatch = CodePatch {
 pub const SHOP_INV_STORE_3: CodePatch = CodePatch {
     label: "Shop inv store 3",
     sig: INV_STORE_3_SIG,
-    at: 17,
+    at: 16,
     old: &[0xC7, 0x40, 0x0C, 0x00, 0x00, 0x00, 0x00],
     new: &[0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90],
 };
 pub const SHOP_INV_STORE_4: CodePatch = CodePatch {
     label: "Shop inv store 4",
     sig: INV_STORE_4_SIG,
-    at: 17,
+    at: 16,
     old: &[0xC7, 0x40, 0x0C, 0x04, 0x00, 0x00, 0x00],
     new: &[0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90],
 };
 pub const SHOP_INV_STORE_5: CodePatch = CodePatch {
     label: "Shop inv store 5",
     sig: INV_STORE_5_SIG,
-    at: 17,
+    at: 16,
     old: &[0xC7, 0x40, 0x0C, 0x07, 0x00, 0x00, 0x00],
     new: &[0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90],
 };

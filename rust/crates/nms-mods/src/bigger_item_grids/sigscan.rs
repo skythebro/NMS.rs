@@ -316,17 +316,40 @@ fn plan_scale_in(
     Some(ScaleRedirect { cave_rva: end, scale, patches })
 }
 
+/// The one function that references `anchor` and passes `keep`. Other references are ignored:
+/// build 183791 added a second `TRANSFER_RECEIVE_DESC` reference (an inlined string copy in an
+/// unrelated function, `lea r11` at RVA 0x26BD47E), so a bare reference count no longer picks the
+/// screen. Two or more functions that pass `keep` still give `None`.
+fn anchor_function(
+    img: &FileImage,
+    code: &[u8],
+    code_rva: usize,
+    anchor: &str,
+    keep: &mut dyn FnMut((usize, usize)) -> bool,
+) -> Option<(usize, usize)> {
+    let mut spans: HashSet<(usize, usize)> = HashSet::new();
+    for xref in anchor_xrefs(img, anchor) {
+        if let Some(span) = function_span(code, code_rva, xref) {
+            if keep(span) {
+                spans.insert(span);
+            }
+        }
+    }
+    if spans.len() != 1 {
+        return None;
+    }
+    spans.into_iter().next()
+}
+
 pub fn plan_scale_redirect(img: &FileImage, anchor: &str, items: u32) -> Option<ScaleRedirect> {
     if items < 1 {
         return None;
     }
     let (code_rva, _) = primary_code(img)?;
     let code = text_section(img)?;
-    let anchors = anchor_xrefs(img, anchor);
-    if anchors.len() != 1 {
-        return None;
-    }
-    let span = function_span(code, code_rva, anchors[0])?;
+    let span = anchor_function(img, code, code_rva, anchor, &mut |span| {
+        plan_scale_in(img, code_rva, code, span, items).is_some()
+    })?;
     plan_scale_in(img, code_rva, code, span, items)
 }
 
@@ -355,15 +378,13 @@ fn call_targets(code: &[u8], code_rva: usize, start: usize, end: usize) -> HashS
     targets
 }
 
-pub fn find_slot_filler(img: &FileImage) -> Option<(usize, usize)> {
-    let (code_rva, _) = primary_code(img)?;
-    let code = text_section(img)?;
-    let transfer = anchor_xrefs(img, TRANSFER_ANCHOR);
-    if transfer.len() != 1 {
-        return None;
-    }
-    let outer = function_span(code, code_rva, transfer[0])?;
-    let slot_refs = anchor_xrefs(img, SLOT_NAME_FORMAT);
+/// Functions called from `outer` that reference `SLOT%02d` (`None` if a callee has no span).
+fn slot_fillers_in(
+    code: &[u8],
+    code_rva: usize,
+    outer: (usize, usize),
+    slot_refs: &[usize],
+) -> Option<HashSet<(usize, usize)>> {
     let mut found = HashSet::new();
     for target in call_targets(code, code_rva, outer.0, outer.1) {
         let span = function_span(code, code_rva, target)?;
@@ -374,6 +395,17 @@ pub fn find_slot_filler(img: &FileImage) -> Option<(usize, usize)> {
             found.insert(span);
         }
     }
+    Some(found)
+}
+
+pub fn find_slot_filler(img: &FileImage) -> Option<(usize, usize)> {
+    let (code_rva, _) = primary_code(img)?;
+    let code = text_section(img)?;
+    let slot_refs = anchor_xrefs(img, SLOT_NAME_FORMAT);
+    let outer = anchor_function(img, code, code_rva, TRANSFER_ANCHOR, &mut |span| {
+        slot_fillers_in(code, code_rva, span, &slot_refs).is_some_and(|f| !f.is_empty())
+    })?;
+    let found = slot_fillers_in(code, code_rva, outer, &slot_refs)?;
     if found.len() != 1 {
         return None;
     }

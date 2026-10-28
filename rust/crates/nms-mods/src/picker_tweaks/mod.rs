@@ -8,11 +8,11 @@
 //! 3. `typed_quantity`: the refiner amount.
 //!
 //! The hotkey is polled in the after-hook of the shared text box `Update` (`text_input_update`,
-//! once per frame on the game thread), not from the picker popup `0x6BC160`: that popup and its slot
+//! once per frame on the game thread), not from the picker popup `0x1406C8B80`: that popup and its slot
 //! filler are hooked by CraftFromStorage as plain hooks, and the picker is detected through the
 //! predicate this mod hooks anyway (it runs every frame while a picker is open).
 //!
-//! While our box is open over a page with no popup, the page ignores the mouse (`[page+0x14C44] = 0`);
+//! While our box is open over a page with no popup, the page ignores the mouse (`[page+0x14C84] = 0`);
 //! the byte is put back when the box has closed and game input is back (300 ms, as the Mods
 //! page does). With a popup up (the item picker) the byte is left alone: the page host hides the
 //! popup for good when it reads 0 (`search::popup_up`).
@@ -23,8 +23,9 @@
 //! `Fe_Back`, not in the action set the box switches off) from also clicking a tab or closing the
 //! picker. The hold also keeps action set 1 off, but never sets the controller's "text entry active"
 //! byte (`ctl+0x40`): that byte belongs to an open text box. The "Pad guard" switch turns the
-//! shield and the hold's action-set switch off live (to bisect). The frontend snaps its cursor to the
-//! mouse device position when the box opens and closes; `cursor` saves the frontend cursor
+//! shield and the hold's action-set switch off live (to bisect). Up to build 181442 the frontend
+//! snapped its cursor to the mouse device position when the box opened and closed (183791 no longer does, so `cursor`
+//! does not find its anchor there and stays off); `cursor` saves the frontend cursor
 //! and the device position at box open and writes them back after the box (both input modes), the
 //! device through its own setter, and GLFW by its cursor mode: its virtual cursor in disabled mode,
 //! else `_glfwPlatformSetCursorPos`, which moves the OS cursor with `SetCursorPos`. Nothing
@@ -95,8 +96,9 @@ const VK_RBUTTON: i32 = 0x02;
 const VK_RETURN: i32 = 0x0D;
 const VK_ESCAPE: i32 = 0x1B;
 
-/// The picker object's "accepts input" byte: hover and click tests bail out while it is 0.
-const PAGE_INPUT: usize = 0x14C44;
+/// The picker object's "accepts input" byte: hover and click tests bail out while it is 0 (`Confirm`
+/// `0x140901CF0` and the popup host `0x140901604` read it; `0x14C44` before build 183791).
+const PAGE_INPUT: usize = 0x14C84;
 /// A control counts as on screen when its hook ran this recently.
 const ACTIVE_MS: u64 = 300;
 /// Game input stays off this long after our box closed, so the key that closed it does not also

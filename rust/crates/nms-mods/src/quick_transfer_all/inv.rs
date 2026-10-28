@@ -51,7 +51,7 @@ pub const CHILD_MAP: usize = 0x150;
 pub const CHILD_COUNT: usize = 0x6C;
 pub const CHILD_ARRAY: usize = 0x70;
 pub const IS_HIDDEN: usize = 0x61;
-pub const PAGE_BUSY: usize = 0x14C44;
+pub const PAGE_BUSY: usize = 0x14C84;
 pub const SCREEN_FROM_FILTER: usize = 0x3C;
 pub const COLUMNS: usize = 10;
 pub const SLOT_CHILD_CAP: i32 = 512;
@@ -105,11 +105,11 @@ pub fn filter_ok_with(filter: i32, foods: bool, custom: bool) -> bool {
     (0..FILTERS_END).contains(&filter)
 }
 
-/// Held stack struct `S = page + 0x19610`: source slot x, y
+/// Held stack struct `S = page + 0x19670` (build 183791; was `0x19610`): source slot x, y
 /// (`-1` when nothing is held) and source inventory pointer (null when nothing is held).
-pub const HELD_X: usize = 0x19640;
-pub const HELD_Y: usize = 0x19644;
-pub const HELD_INV: usize = 0x19650;
+pub const HELD_X: usize = 0x196A0;
+pub const HELD_Y: usize = 0x196A4;
+pub const HELD_INV: usize = 0x196B0;
 
 /// The player is carrying a stack picked up from a slot, the same three fields `DoInventorySlots`
 /// tests before it treats a click as a drop.

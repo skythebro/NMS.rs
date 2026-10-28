@@ -353,7 +353,8 @@ fn install_text(image: &ProcessImage) -> Result<(), String> {
         && fixed(7..18, &[0x41, 0xB0, 0x01, 0xBA, 0x01, 0x00, 0x00, 0x00, 0x48, 0x8B, 0x88])
         && code.get(18..22).is_some_and(super::context::controller_disp_matches)
         && fixed(22..26, &[0x44, 0x88, 0x61, 0x40])
-        && fixed(26..33, &[0x48, 0x81, 0xC1, 0x00, 0x15, 0x00, 0x00])
+        && fixed(26..29, &[0x48, 0x81, 0xC1])
+        && fixed(29..33, &sigs::CONTROLLER_SETS.to_le_bytes()[..])
         && code.get(33) == Some(&0xE8))
     {
         return Err("text popup close code changed (game update?)".into());
@@ -954,7 +955,7 @@ fn close_popup(mgr: usize) {
         unsafe {
             let _ = nms_core::mem::write(controller + 0x40, 0u8);
             let set_actions: SetActionsFn = std::mem::transmute(SET_ACTIONS.load(Ordering::Acquire));
-            set_actions((controller + 0x1500) as u64, 1, 1);
+            set_actions((controller + sigs::CONTROLLER_SETS as usize) as u64, 1, 1);
         }
     }
     // SAFETY: nmspy-style `Stop(mgr)`.
@@ -985,7 +986,7 @@ fn set_input(enabled: bool) {
     unsafe {
         let _ = nms_core::mem::write(controller + 0x40, u8::from(!enabled));
         let set_actions: SetActionsFn = std::mem::transmute(SET_ACTIONS.load(Ordering::Acquire));
-        set_actions((controller + 0x1500) as u64, 1, u8::from(enabled));
+        set_actions((controller + sigs::CONTROLLER_SETS as usize) as u64, 1, u8::from(enabled));
     }
 }
 
@@ -1011,8 +1012,9 @@ fn release_input_if_due() {
 
 /// Offset of the "in-game keyboard active" byte; `Update` does nothing while it is 0.
 const TEXT_KEYBOARD_FLAG_OFFSET: usize = 0xAF4;
-/// Offset of the text manager inside the application object.
-const TEXT_MGR_OFFSET: usize = 0x859970;
+/// Offset of the text manager inside the application object (build 183791: `app+0x880CFC` is its
+/// `+0xAF4` and `app+0x880878` its `+0x670`, read at `0x14074EEA9`; `0x859970` before).
+const TEXT_MGR_OFFSET: usize = 0x880208;
 /// The real text manager (the game also runs `Update` on a second, unrelated instance).
 fn real_mgr() -> Option<usize> {
     super::context::data(APP_GLOBAL.load(Ordering::Acquire)).map(|app| app + TEXT_MGR_OFFSET)

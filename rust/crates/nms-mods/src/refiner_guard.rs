@@ -6,7 +6,7 @@
 //!
 //! One hook, on the entry of `RemovePart(tool, handle, mode) -> bool`. When the part being moved or deleted
 //! is a refiner (or Nutrient Processor) whose machine holds any stack, the original is not called and the
-//! hook does exactly what the game's own "refiner is running" refusal does (`0x1410B5630`): one
+//! hook does exactly what the game's own "refiner is running" refusal does (`0x1410D7FB0`): one
 //! `AddTimedMessage` on-screen notice (not modal) and `return 0`. The two callers it refuses write nothing
 //! on 0, so the build tool stays where it was, as after a vanilla refusal.
 //!
@@ -70,8 +70,9 @@ static LANG: OnceLock<&'static str> = OnceLock::new();
 type RemoveFn = unsafe extern "system" fn(usize, u32, i32) -> u8;
 type LookupFn = unsafe extern "system" fn(u32, *mut usize) -> u32;
 type CompGetFn = unsafe extern "system" fn(i32, usize) -> usize;
-/// `AddTimedMessage(list, text, duration, colour, audio, timer, unused, f32, u8, u8, u8)` `0x1409BF7B0`: the
-/// eleven arguments of the vanilla refusal call (and of QuickRecharge's notice).
+/// `AddTimedMessage(list, text, duration, colour, audio, timer, unused, f32, u8, u8, u8)` `0x1409D3FA0`: the
+/// eleven arguments of the vanilla refusal call (and of QuickRecharge's notice). Build 183791 kept every
+/// register and stack argument (`[rbp+0x260..0x290]`) where it was.
 type AddMessageFn = unsafe extern "system" fn(usize, *const u8, f32, usize, u32, *mut u32, usize, f32, u8, u8, u8);
 type ReleaseFn = unsafe extern "system" fn(*mut u32);
 
@@ -93,9 +94,10 @@ const ELEMENT_TYPE: usize = 0x24;
 /// charge `MAINT_FUEL1`, "Charge equipment with Carbon") are type 1. They never hold the player's items.
 const TYPE_TECHNOLOGY: i32 = 1;
 const MAX_SLOTS: i32 = 256;
-/// The message list fields `AddTimedMessage` reads (`+0x28C` count, `+0x290` data).
-const LIST_SPAN: usize = 0x298;
-/// The game copies the text into a 0x200-byte fixed string (`0x1401FD800`).
+/// The message list fields `AddTimedMessage` reads: `+0xD8`, `+0x2A4` count, `+0x2A8` data, and since build
+/// 183791 a byte at `+0x8F8` that makes it return early (was `+0x28C` / `+0x290`, span `0x298`, before).
+const LIST_SPAN: usize = 0x900;
+/// The game copies the text into a 0x200-byte fixed string (`0x1401F7BE0`, `cmp rax,0x200`).
 const TEXT_LEN: usize = 0x200;
 const NOTICE_EN: &str = "Empty this refiner first: moving it deletes its contents.";
 
@@ -232,8 +234,9 @@ fn loaded_refiner(handle: u32) -> Option<(usize, usize)> {
         return None;
     }
     let table = read_ptr(comp + UNIT_TABLE).filter(|&t| readable(t, 0x40))?;
-    // SAFETY: `0x142D25110(type, table)`: reads the table's bitset and component list, no stores. The game
-    // calls it with `[unit+8]` of a maintenance component the same way (`0x1410286CA`, `0x1410B765E`).
+    // SAFETY: `0x142D95FC0(type, table)`: reads the table's bitset and component list, no stores. The game
+    // calls it with `[unit+8]` of a maintenance component the same way (the maintenance getter
+    // `0x141048CE0`, the refiner update at `0x1410D9FD7`).
     let unit = unsafe { std::mem::transmute::<usize, CompGetFn>(get)(i32::from(ty), table) };
     if unit < MIN_ADDR || !readable(unit, UNIT_DATA + 8) {
         return None;
@@ -674,7 +677,7 @@ mod tests {
     }
 
     /// Runs the whole `locate` on `Binaries\NMS.exe` when it is there (skipped elsewhere). Values are the
-    /// ones read in the disassembly of build 88,560,712; another build only has to locate cleanly.
+    /// ones read in the disassembly of builds 88,560,712 and 183791; another build only has to locate cleanly.
     #[test]
     fn locates_everything_in_the_game_exe() {
         let exe = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().find_map(|d| {
@@ -693,6 +696,21 @@ mod tests {
             assert_eq!(f.notice.add, 0x9BF7B0);
             assert_eq!(f.notice.release, 0x2D65A80);
             assert_eq!(f.notice.object, 0x847BB0);
+            assert_eq!(f.notice.audio, 0x75AC6211);
+            assert_eq!(f.notice.duration, 1.0);
+        }
+        // Build 183791 (89,491,528 bytes).
+        if std::fs::metadata(&exe).map(|m| m.len()).ok() == Some(89_491_528) {
+            assert_eq!(f.remove, 0x3D50C0);
+            assert_eq!(f.lookup, 0x3E3300);
+            assert_eq!(f.get, 0x2D95FC0);
+            assert_eq!(f.move_ret, 0x3C5771);
+            assert_eq!(f.delete_ret, 0x3C55B5);
+            assert_eq!(f.app_global, 0x6F60828);
+            assert_eq!(f.type_word, 0x517F8D0);
+            assert_eq!(f.notice.add, 0x9D3FA0);
+            assert_eq!(f.notice.release, 0x2DD6870);
+            assert_eq!(f.notice.object, 0x86E3D0);
             assert_eq!(f.notice.audio, 0x75AC6211);
             assert_eq!(f.notice.duration, 1.0);
         }

@@ -16,10 +16,11 @@ pub const POPUP_MODES: [i32; 2] = [0x47, 0x67];
 pub const FEED_MODE: i32 = 0x41;
 pub const VIEW_OFFSET: u64 = 0xC240;
 pub const STORE_NAME_AT: usize = 0x104;
-pub const QUICK_STATE_AT: usize = 0x14CE0;
-pub const QUICK_FOCUS_AT: usize = 0x14CD8;
+// Build 183791: page fields moved (0x14CE0 -> 0x14D20, 0x14CD8 -> 0x14D18, 0x19650 -> 0x196B0).
+pub const QUICK_STATE_AT: usize = 0x14D20;
+pub const QUICK_FOCUS_AT: usize = 0x14D18;
 pub const QUICK_VISIBLE: i32 = 10;
-pub const QUICK_SOURCE_AT: usize = 0x19650;
+pub const QUICK_SOURCE_AT: usize = 0x196B0;
 pub const QUICK_ROW_SIZE: usize = 0x70;
 pub const QUICK_MARK_AT: usize = 0x40;
 pub const QUICK_MAGIC: u32 = 0x4346_5300;

@@ -1,4 +1,5 @@
-//! Galaxy map filters. Offsets re-read in the disassembly 2026-10-12 (cycle poll, gate, list builder, colour apply).
+//! Galaxy map filters. Offsets re-read in the disassembly 2026-10-12 (cycle poll, gate, list builder, colour apply);
+//! re-checked on build 183791 (2026-10-28): every hooked function has the same body, offsets unchanged.
 
 use crate::{CodePatch, ModSigs, Sig, SigUse};
 

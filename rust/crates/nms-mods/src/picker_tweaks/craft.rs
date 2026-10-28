@@ -1,14 +1,14 @@
 //! Search in the inventory craft list (empty slot, Craft: technology and product build list).
 //!
-//! The craft list (`0x1406CC3B0`, popup
+//! The craft list (`0x1406D8F90`, popup
 //! kind 2/3) rebuilds its temporary inventories every frame, one `add(inventory, out, element)` call
-//! (`0x1404D0780`) per recipe, at three call sites. Hiding cards through the slot-filler predicate
+//! (`0x1404D9590`) per recipe, at three call sites. Hiding cards through the slot-filler predicate
 //! did not change what the list shows (in-game test 2026-10-13), so the recipes are filtered where
 //! they are added: the three `call add` instructions are sent to a stub that jumps to
 //! [`add_detour`]. Without a craft-list search the detour calls the original at once. A dropped
 //! recipe gets exactly what `add` itself does when it cannot place an element (the 8-byte store
-//! `mov qword [r14], -1` at `0x1404D0B7C`, then return `out`); the callers ignore the result
-//! (`0x1406CC649`, `0x1406CC872`, `0x1406CCB9D`).
+//! `mov qword [r14], -1` at `0x1404D998C`, then return `out`); the callers ignore the result
+//! (`0x1406D922A`, `0x1406D9453`, `0x1406D977E`).
 //!
 //! The sites are located and the stub is built once at install (pattern scans and the near
 //! allocation never run inside a detour). The patch follows the "Search item pickers" switch: applied

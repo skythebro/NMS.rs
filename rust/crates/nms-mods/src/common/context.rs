@@ -5,11 +5,12 @@
 use nms_core::game::live;
 use nms_core::mem::read_ptr;
 
-/// The input controller offset in the application data when the core context is off (build 180836).
-pub const CONTROLLER_OFFSET_FALLBACK: u32 = 0x933B78;
+/// The input controller offset in the application data when the core context is off (build 183791:
+/// getter 6 is `mov rax,[rax+0x95AEB8]`; 0x933B78 on 180836, 0x933BC8 on 181442).
+pub const CONTROLLER_OFFSET_FALLBACK: u32 = 0x95AEB8;
 
 /// Offset of the input controller pointer in the application data, read from the game's getter by
-/// the core (it moved to 0x933BC8 on build 181442).
+/// the core (0x95AEB8 on build 183791).
 pub fn controller_offset() -> u32 {
     live::get().map_or(CONTROLLER_OFFSET_FALLBACK, |g| g.layout().members.input_controller)
 }

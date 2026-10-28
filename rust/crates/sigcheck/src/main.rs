@@ -8,8 +8,8 @@
 //! `--compare` checks both builds and lists what changed per signature: BROKE (found before, not
 //! unique now), FIXED, NEW, GONE, and MOVED (same signature at a new RVA; only listed with
 //! `--verbose`). Then it gives a verdict per mod. Exit code 1 if anything broke or the new build
-//! has a failure. Old builds are in `nmsexebackups\` (`NMS_experimental 0810.exe` is 181442,
-//! `NMS_experimental 0110.exe` is 180836). The old build is checked against the current tables, so
+//! has a failure. Old builds are in `nmsexebackups\` (`NMS_public 2810 183791.exe` is 183791,
+//! `NMS_experimental 0810.exe` is 181442, `NMS_experimental 0110.exe` is 180836). The old build is checked against the current tables, so
 //! a FIXED on an old build can just mean that signature was widened after that build.
 
 use std::path::{Path, PathBuf};

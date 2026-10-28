@@ -30,12 +30,15 @@ pub const SHRINK_FREIGHTER_GRIDS: bool = false;
 pub const PROBE_PAGE_DIFF: bool = false;
 pub const REMEMBER_FREIGHTER_TAB: bool = true;
 
-pub const FREIGHTER_SELECTOR: usize = 0x19670;
+/// Freighter Q/E selector on the inventory page (`SetSubTab`: `cmp edx,[rcx+0x196D0]`, build 183791;
+/// 0x19670 before).
+pub const FREIGHTER_SELECTOR: usize = 0x196D0;
 pub const FREIGHTER_CORE_KIND: u64 = 7;
 pub const FREIGHTER_FIRST: i32 = 3;
 pub const FREIGHTER_LAST: i32 = 12;
 pub const STORE_STRIDE: u64 = 0x248;
-pub const PAGE_BUSY_FROM_SCREEN: usize = 0x7BC;
+/// Busy flag (`page+0x14C84` on build 183791, 0x14C44 before) minus the screen id (`page+0x14488`).
+pub const PAGE_BUSY_FROM_SCREEN: usize = 0x7FC;
 pub const PAGE_OPENED_FROM_SELECTOR: usize = 0x80;
 pub const CARGO_HEIGHTS: [i32; 2] = [5, 7];
 pub const CHEST_SLOT: i32 = 74;
@@ -112,9 +115,11 @@ pub const CAVE_HEAD: &[u8] = &[0x51, 0x41, 0x83, 0xFE, 0x05];
 pub const ICON_BYTES: &[u8] = &[0x8B, 0x8C, 0x39];
 pub const ICON_AFTER: &[u8] = &[0x89, 0x4C, 0x24, 0x20];
 pub const CLICK_BYTES: &[u8] = &[0x41, 0x89, 0x86];
+/// Click gates `cmp dword [r14+0x14A20], 2` and `cmp dword [r14+0x14C10], 2` (the second was
+/// 0x14BF0 before build 183791).
 pub const SKIP_BYTES: &[u8] = &[
     0x41, 0x83, 0xBE, 0x20, 0x4A, 0x01, 0x00, 0x02, 0x0F, 0x84, 0x47, 0x01, 0x00, 0x00, 0x41, 0x83,
-    0xBE, 0xF0, 0x4B, 0x01, 0x00, 0x02, 0x0F, 0x84, 0x39, 0x01, 0x00, 0x00,
+    0xBE, 0x10, 0x4C, 0x01, 0x00, 0x02, 0x0F, 0x84, 0x39, 0x01, 0x00, 0x00,
 ];
 pub const HIDE_BYTES: &[u8] = &[0x0F, 0x11, 0x44, 0x24, 0x70];
 pub const TIP_COPY_BYTES: &[u8] = &[0x41, 0x0F, 0x10, 0x04, 0x24, 0x41, 0x0F, 0x10, 0x4C, 0x24, 0x10];

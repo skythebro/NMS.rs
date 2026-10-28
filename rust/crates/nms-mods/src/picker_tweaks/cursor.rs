@@ -4,13 +4,15 @@
 //! with is the frontend cursor in the page state (`[G]+0x0C`/`+0x10`, UI units; `+0x14`/`+0x18`
 //! its velocity, `+0x28`/`+0x2C` the last mouse position it saw). The input builder moves it with the
 //! stick in pad mode and sets it from the mouse device in keyboard/mouse mode. On the frame the text
-//! box comes up or goes away (`[mgr+0xAF4] && [mgr+0x670] != 0` changes, `0x1401EC576`) the builder
-//! takes the mouse device position as the cursor, whatever the mode: that is the jump. In pad mode the
+//! box came up or went away (`[mgr+0xAF4] && [mgr+0x670] != 0` changed, build 181442 `0x1402020E6`)
+//! the builder took the mouse device position as the cursor, whatever the mode: that was the jump.
+//! Build 183791 dropped that check from the builder (`FRONTEND_TEXT_SNAP` is not found), so `locate`
+//! fails there and nothing in this file runs. In pad mode the
 //! mouse device position is stale (where the mouse was last), so the cursor lands somewhere else.
 //!
 //! So at box open the frontend fields and the mouse device position (input controller `+0x10`,
-//! `+0x200`/`+0x210`, what GLFW reports) are saved; after the box they are written back: the frontend
-//! fields directly, the device position through the device's own setter (`0x142C3ADB0`, vtable
+//! `+0x2E0`/`+0x2F0` since build 183791, `+0x200`/`+0x210` before; what GLFW reports) are saved;
+//! after the box they are written back: the frontend fields directly, the device position through the device's own setter (`0x142CA9BC0`, vtable
 //! `+0x38`), which also sets the "previous" position, so the game sees no mouse motion and stays in
 //! pad mode. GLFW is written by its real cursor mode: in disabled mode its virtual cursor
 //! (`window+0x1E8`), else `_glfwPlatformSetCursorPos` (GLFW's last position plus `SetCursorPos`,
@@ -28,8 +30,10 @@ use nms_sdk::sigs::picker_tweaks as sigs;
 /// The mouse device inside the input controller.
 const CTL_MOUSE: usize = 0x10;
 const VTBL_SET_POS: usize = 0x38;
-const DEV_X: usize = 0x200;
-const DEV_Y: usize = 0x210;
+/// Device position doubles (`movups [rbx+0x2E0]` / `[rbx+0x2F0]` in `DEVICE_SET_POS`; `0x200`/`0x210`
+/// before build 183791). `locate` checks the same two stores.
+const DEV_X: usize = 0x2E0;
+const DEV_Y: usize = 0x2F0;
 /// Frontend cursor fields in the page state.
 const FE_POS: usize = 0x0C;
 const FE_VEL: usize = 0x14;

@@ -19,9 +19,12 @@ pub const SOURCES: &str = "40 55 57 41 54 41 55 41 57 48 81 EC B0 00 00 00 4D 8B
 pub const OWNED_LISTS: &str = "48 89 5C 24 10 48 89 4C 24 08 57 48 83 EC 20 48 8B 1D ? ? ? ? 48 8B 3D ? ? ? ? 48 81 C3 ? ? ? ? \
 48 89 5C 24 30 48 39 7B 20 74 ? B2 01 48 8D 4C 24 30 E8 ? ? ? ? 88 43 18 48 89 7B 20 80 7B 18 00 \
 48 8D 0D ? ? ? ? 48 8B 5C 24 38 48 8D 05 ? ? ? ? 48 0F 45 C1";
-pub const BASE: &str = "4C 8B 0D ? ? ? ? 8B 05 ? ? ? ? 4C 89 7D 68 4C 89 7D 70 44 88 7D 90 4D 8D 14 41 4D 3B CA 74 ? \
-41 BB ? ? ? ? 41 0F B7 01 48 8D 8D E0 02 00 00 66 89 85 E0 02 00 00 E8 ? ? ? ? 83 F8 10 77 06 \
-41 0F A3 C3 72 0B 49 83 C1 02 4D 3B CA 75 D5 EB 1F 41 0F B7 01 4C 8D 45 68 48 8D 95 E0 02 00 00 \
+// Build 183791: zero register r15 -> r13, found vector [rbp+0x68] -> [rbp+0x58], found flag
+// [rbp-0x70] -> [rsp+0x71], and a 10-byte nop before the loop. The nop stays concrete: the
+// operand offsets in game.rs (BASE_TYPES_AT, OBJECT_TYPE_CALL_AT, BASE_CHESTS_CALL_AT) depend on it.
+pub const BASE: &str = "4C 8B 0D ? ? ? ? 8B 05 ? ? ? ? 4C 89 6D 58 4C 89 6D 60 44 88 6C 24 71 4D 8D 14 41 4D 3B CA 74 ? \
+41 BB ? ? ? ? 66 66 0F 1F 84 00 00 00 00 00 41 0F B7 01 48 8D 8D E0 02 00 00 66 89 85 E0 02 00 00 E8 ? ? ? ? \
+83 F8 10 77 06 41 0F A3 C3 72 0B 49 83 C1 02 4D 3B CA 75 D5 EB ? 41 0F B7 01 4C 8D 45 58 48 8D 95 E0 02 00 00 \
 66 89 85 E0 02 00 00 E8";
 pub const POPUP: &str = "48 8B C4 48 89 50 10 48 89 48 08 55 53 56 57 41 54 41 55 41 56 41 57 48 8D A8 38 FD FF FF \
 48 81 EC 88 03 00 00";
@@ -31,8 +34,9 @@ pub const VIEW: &str =
     "89 54 24 10 48 83 EC 28 48 8B 01 4C 8B 08 49 63 81 18 0B 00 00 83 F8 FF 74 36 4C 8B D0";
 pub const COOKER_TAB: &str = "83 7B 24 02 0F 85 ? ? ? ? 48 8B 0D ? ? ? ? 48 8B D3 48 83 C1 60 E8 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? \
 F3 0F 10 88 A0 01 00 00";
-pub const COOKER_STRIP: &str = "45 84 F6 0F 84 83 00 00 00 48 8B 8D D0 02 00 00";
-pub const COOKER_FILTER: &str = "8B 83 1C 0B 00 00 85 C0 75 0C C7 45 78 04";
+// Build 183791: the "item popup" flag moved from r14b to its stack copy [rsp+0x70] (`cmp byte [rsp+0x70],0`).
+pub const COOKER_STRIP: &str = "80 7C 24 70 00 0F 84 83 00 00 00 48 8B 8D D0 02 00 00";
+pub const COOKER_FILTER: &str = "8B 83 1C 0B 00 00 85 C0 75 0C C7 45 68 04";
 pub const ORDER: &str = "4C 8B 46 08 41 B3 01 8B 56 04";
 pub const COOK_ITEM: &str = "48 83 EC 28 8B 41 24 48 8B D1 85 C0 75 21 48 8B 0D ? ? ? ? 48 83 C1 60 E8 ? ? ? ? \
 48 85 C0 74 32 0F B6 80 94 01 00 00";
@@ -61,8 +65,10 @@ pub const QUICK_PICK: &str = "48 89 5C 24 18 48 89 74 24 20 55 41 56 41 57 48 8B
 4C 8B F9 49 8B D1 49 8B C8 49 8B F1";
 pub const OBJECT_CHESTS: &str =
     "4C 8B DC 49 89 4B 08 53 57 48 81 EC C8 00 00 00 0F B7 0A B8 FF FF 00 00";
-pub const QUICK_BUTTON: &str = "48 8B C4 48 89 58 08 44 88 48 20 55 56 57 41 54 41 55 41 56 41 57 48 81 EC 40 01 00 00 \
-0F 29 70 B8 48 8B F9 0F 29 78 A8";
+// Build 183791: new prologue (rbx/rbp/rsi saved in the home slots, five pushes). Still six
+// arguments: rcx, rdx, r8d, r9b, a qword at entry+0x28 and a byte at entry+0x30.
+pub const QUICK_BUTTON: &str = "48 8B C4 48 89 58 08 48 89 68 10 48 89 70 18 44 88 48 20 57 41 54 41 55 41 56 41 57 \
+48 81 EC 40 01 00 00 0F 29 70 C8 48 8B F9 0F 29 78 B8 48 8B EA";
 
 pub const REFINER_TAB: CodePatch = CodePatch {
     label: "Refiner: storage tabs",
@@ -76,8 +82,10 @@ pub const COOKER_TAB_PATCH: CodePatch = CodePatch {
     label: "Cooker Processed tab",
     sig: COOKER_TAB,
     at: 0x06,
-    old: &[0x82, 0x03, 0x00, 0x00],
-    new: &[0x58, 0x04, 0x00, 0x00],
+    // The jne for "not a substance" skips `mov dil,1` and lands on the join `test dil,dil`, the
+    // same place the je after the product lookup goes. Build 183791: jne rel 0x362 -> rel 0x49C.
+    old: &[0x62, 0x03, 0x00, 0x00],
+    new: &[0x9C, 0x04, 0x00, 0x00],
 };
 
 pub const COOKER_FILTER_PATCH: CodePatch = CodePatch {
@@ -91,7 +99,7 @@ pub const COOKER_FILTER_PATCH: CodePatch = CodePatch {
 pub const COOKER_STRIP_PATCH: CodePatch = CodePatch {
     label: "Cooker inventory tabs",
     sig: COOKER_STRIP,
-    at: 0x03,
+    at: 0x05,
     old: &[0x0F, 0x84, 0x83, 0x00, 0x00, 0x00],
     new: &[0xE9, 0x84, 0x00, 0x00, 0x00, 0x90],
 };

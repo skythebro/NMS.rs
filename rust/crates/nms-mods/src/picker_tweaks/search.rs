@@ -2,12 +2,12 @@
 //! in the inventory craft list (empty slot, Craft: the technology and product build list).
 //!
 //! The picker asks the predicate
-//! `0x1406C9720(popup, element, state, out)` about every card every frame; return 2 hides a card
+//! `0x1406D62B0(popup, element, state, out)` about every card every frame; return 2 hides a card
 //! and also drops it from the page count and the scroll dots. The detour calls the original first
 //! and only turns a shown card (0 or 1) into a hidden one (2), so the cooker tabs keep working.
 //!
 //! The name a player sees comes from the game's own lookup, as its tooltip code does it
-//! (`0x1406BB3B0..0x1406BB406`): product or substance record by id (`app+0x60`), the name key at
+//! (`0x1406C7DD0..0x1406C7E26`): product or substance record by id (`app+0x60`), the name key at
 //! record `+0x270` (product) or `+0x154` (substance), then the localisation lookup
 //! `(table, key, 0)`. All three are pure reads (hash finds; the loc lookup copies the key to its own
 //! stack and returns the key pointer itself when the id is unknown), checked in the disassembly.
@@ -16,7 +16,7 @@
 //! craft list and the Install Technology list) use the technology lookup with its "build if missing"
 //! flag off and `NameLower` at `+0x244`. The item id is searched too.
 //!
-//! The craft list is popup kind 2 or 3 (`0x1406CC3B0`, `BUILD_TECH`/`BUILD_PROD`). Its cards also go
+//! The craft list is popup kind 2 or 3 (`0x1406D8F90`, `BUILD_TECH`/`BUILD_PROD`). Its cards also go
 //! through the predicate (no filter state), but hiding them there did not change the list in game, so
 //! `craft` filters the recipes where the list adds them to its temporary inventories
 //! ([`craft_keeps`]).
@@ -31,19 +31,21 @@ use super::{log_line, now_ms, text_box, LOG_NAMES, PICKER_SEARCH};
 
 /// Mode of the picker (`popup+0x14488`): 1 Transfer, 0x3A refiner and cooker, 0x47/0x67 customiser.
 pub const POPUP_MODE: usize = 0x14488;
-/// Which popup the page host `0x1408F2200` runs (`page+0x14C28`): -1 none, 0 the item picker
-/// `0x6BC160` (every picker mode), other values other popups (jump table at `0x1408F235C`).
-pub const POPUP_KIND: usize = 0x14C28;
-/// State of the popup's frame layer (`page+0x14A58`, state at layer `+0x198`): 0 closed, 1 opening,
-/// 2 open, 3 closing (`0x1408F5F40`). The host closes kinds 2 and 3 once it reads 0.
-pub const POPUP_LAYER_STATE: usize = 0x14BF0;
+/// Which popup the page host `0x140901520` runs (`page+0x14C68`, `0x14C28` before build 183791): -1
+/// none, 0 the item picker `0x1406C8B80` (every picker mode), other values other popups (jump at
+/// `0x1409015AA`, same kind table as before).
+pub const POPUP_KIND: usize = 0x14C68;
+/// State of the popup's frame layer (`page+0x14A78`, state at layer `+0x198`; `0x14A58`/`0x14BF0`
+/// before build 183791): 0 closed, 1 opening, 2 open, 3 closing. The host closes kinds 2 and 3 once
+/// it reads 0 (`0x14090154F`).
+pub const POPUP_LAYER_STATE: usize = 0x14C10;
 const PICKER_KIND: i32 = 0;
-/// The inventory craft list (technology and product build list), `0x1406CC3B0`.
+/// The inventory craft list (technology and product build list), `0x1406D8F90`.
 const CRAFT_KINDS: [i32; 2] = [2, 3];
 
 /// A popup of any kind is up on this page (its kind is set or its frame layer is not closed).
 /// While one is, the page's input byte must not be cleared: the host then clears the layer's
-/// "stay open" byte (`page+0x14BE8`, `0x1408F22E4`) every frame and the layer animates out for
+/// "stay open" byte (`page+0x14C08`, `0x14090160D`) every frame and the layer animates out for
 /// good, which hid the Transfer picker under the search box.
 pub fn popup_up(page: usize) -> bool {
     page >= MIN_ADDR
@@ -77,13 +79,14 @@ pub fn kind_label(kind: i32, mode: i32) -> String {
     }
 }
 
-/// First card shown (`popup+0x14CD8`). The game clamps it to the card count, not to the last page.
-const POPUP_SCROLL: usize = 0x14CD8;
+/// First card shown (`popup+0x14D18`, `0x14CD8` before build 183791; `0x1406CAA4E`, `0x1406D53C2`).
+/// The game clamps it to the card count, not to the last page.
+const POPUP_SCROLL: usize = 0x14D18;
 const ELEMENT_TYPE: usize = 0x24;
 const SUBSTANCE_NAME: usize = 0x154;
 const PRODUCT_NAME: usize = 0x270;
 /// `cGcTechnology.NameLower` (`cTkFixedString0x80`; `ID` at `+0x108`, which the lookup compares at
-/// `0x140EC8E33`). `+0x50` is `Group`, empty for most technologies.
+/// `0x140EE3CDF`). `+0x50` is `Group`, empty for most technologies.
 const TECH_NAME: usize = 0x244;
 /// The loc lookup reads at most 31 characters of a key.
 const KEY_LEN: usize = 0x20;
@@ -328,7 +331,7 @@ fn resolve(element: usize, id: &[u8; 16]) -> (String, String, bool) {
         // predicate make for the same element; a pure hash find.
         Some(0) => (unsafe { std::mem::transmute::<usize, LookupFn>(l.substance)(app + 0x60, element) }, SUBSTANCE_NAME),
         Some(2) => (unsafe { std::mem::transmute::<usize, LookupFn>(l.product)(app + 0x60, element) }, PRODUCT_NAME),
-        // SAFETY: `tech(app+0x60, id*, 0) -> record` as the slot filler calls it (`0x1406C8E3B`),
+        // SAFETY: `tech(app+0x60, id*, 0) -> record` as the slot filler calls it (`0x1406D5A0B`),
         // with "build a missing procedural technology" off: a hash find and a list walk only.
         Some(1) if l.tech != 0 => (unsafe { std::mem::transmute::<usize, TechFn>(l.tech)(app + 0x60, element, 0) }, TECH_NAME),
         _ => return (fallback, String::new(), false),
@@ -346,7 +349,7 @@ fn resolve(element: usize, id: &[u8; 16]) -> (String, String, bool) {
     let mut buf = [0u8; KEY_LEN + 1];
     buf[..end].copy_from_slice(&raw[..end]);
     // SAFETY: the loc table accessor returns a static built at boot; the lookup is
-    // `(table, key, 0)` exactly as the game calls it at 0x1406BB400, and only reads.
+    // `(table, key, 0)` exactly as the game calls it at 0x1406C7E26, and only reads.
     let table = unsafe { std::mem::transmute::<usize, LocTableFn>(l.loc_table)() };
     if table < MIN_ADDR {
         return (key.clone(), key, false);
@@ -522,11 +525,12 @@ mod tests {
 
     #[test]
     fn popup_fields_sit_where_the_host_reads_them() {
-        // Host 0x1408F2200: layer at page+0x14A58, its state at +0x198, its "stay open" byte at
-        // +0x190 (= page+0x14BE8, cleared when page+0x14C44 is 0).
-        assert_eq!(0x14A58 + 0x198, POPUP_LAYER_STATE);
-        assert_eq!(0x14A58 + 0x190, 0x14BE8);
-        assert_eq!(POPUP_KIND, 0x14C28);
+        // Host 0x140901520 (build 183791): layer at page+0x14A78, its state at +0x198, its "stay open"
+        // byte at +0x190 (= page+0x14C08, cleared when page+0x14C84 is 0).
+        assert_eq!(0x14A78 + 0x198, POPUP_LAYER_STATE);
+        assert_eq!(0x14A78 + 0x190, 0x14C08);
+        assert_eq!(POPUP_KIND, 0x14C68);
+        assert_eq!(POPUP_SCROLL, 0x14D18);
         // Null pages are never open.
         assert_eq!(searchable_kind(0), None);
         assert!(!popup_up(0));

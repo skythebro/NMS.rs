@@ -20,13 +20,14 @@ pub const AWARD_NANITES: &str = "48 89 5C 24 ? 57 48 83 EC ? 44 8B 81 ? ? ? ? 48
 pub const SELL_DEMAND: &str = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20  \
 41 56 48 83 EC 50 80 3D";
 
-pub const BASE: &str = "4C 8B 0D ? ? ? ? 8B 05 ? ? ? ? 4C 89 7D 68 4C 89 7D 70 44 88 7D 90 4D 8D 14 41 4D 3B CA 74 ?  \
-41 BB ? ? ? ? 41 0F B7 01 48 8D 8D E0 02 00 00 66 89 85 E0 02 00 00 E8 ? ? ? ? 83 F8 10 77 06  \
-41 0F A3 C3 72 0B 49 83 C1 02 4D 3B CA 75 D5 EB 1F 41 0F B7 01 4C 8D 45 68 48 8D 95 E0 02 00 00  \
+/// Build 183791: list struct moved to `rbp+0x58`, a 10-byte loop-align NOP before the first loop.
+pub const BASE: &str = "4C 8B 0D ? ? ? ? 8B 05 ? ? ? ? 4C 89 6D 58 4C 89 6D 60 44 88 6C 24 71 4D 8D 14 41 4D 3B CA 74 ?  \
+41 BB ? ? ? ? 66 66 0F 1F 84 00 00 00 00 00 41 0F B7 01 48 8D 8D E0 02 00 00 66 89 85 E0 02 00 00 E8 ? ? ? ?  \
+83 F8 10 77 06 41 0F A3 C3 72 0B 49 83 C1 02 4D 3B CA 75 D5 EB ? 41 0F B7 01 4C 8D 45 58 48 8D 95 E0 02 00 00  \
 66 89 85 E0 02 00 00 E8";
 pub const CHOICES: &str = "89 54 24 10 48 89 4C 24 08 55 53 56 57 41 57 48 8B EC 48 81 EC 80 00 00 00  \
 49 8B 40 08 49 8D 70 08 49 8B D8 41 0F B6 F9";
-pub const CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 44 4C 01 00 00";
+pub const CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 84 4C 01 00 00";
 pub const CONFIRM_SLOW_LOAD: &str = "83 F8 02 75 0A F3 0F 10 35 ? ? ? ?";
 pub const DEPOSIT_LOOKUP: &str = "49 8B 8E 78 44 01 00 48 8D 55 B0 C7 44 24 7C 00 00 00 00 45 33 C0 0F 28 44 24 70  \
 66 0F 7F 45 B0 E8 ? ? ? ? 48 85 C0 0F 84 ? ? ? ? 45 33 C0 66 0F 7F 7D B0 48 8D 55 B0  \
@@ -46,11 +47,14 @@ pub const FILTER: &str = "41 8B 44 24 24 32 DB 44 8B B7 ? ? ? ? 85 C0 75 11 41 8
 /// Patch head `NOTIFY_PATCH_BYTES`; new bytes are `E9` rel32 to a cave (runtime).
 pub const NOTIFY_PATCH: &str = "44 8B 7C 24 74 4C 8B A5 98 04 00 00";
 pub const NOTIFY_TOAST: &str = "48 8B 1D ? ? ? ? 48 8D 4C 24 78 C7 44 24 78 00 00 00 00";
-pub const SAVE_ID: &str = "49 8B ? 80 89 00 00 49 89 ? E8 87 01 00";
+/// Save id copy: source `CommonState+0x8C10` (was `0x8980`), dest `PlayerState+0x187E8`.
+pub const SAVE_ID: &str = "49 8B ? 10 8C 00 00 49 89 ? E8 87 01 00";
 /// `SELL_TOAST_AT`: toggles five-byte `E8` call to NOP (original rel32 captured at runtime).
-pub const SELL_TOAST: &str = "45 33 C9 4C 89 6C 24 20 45 8B C4 48 8D 95 B0 03 00 00 48 8D 8B 10 6A 30 00 E8";
+/// The `BIG_SELLER` block; the three blocks after it (`SMUGGLE_VALUE`, `FISH_CASH`, `BONE_CASH`)
+/// differ only by `rbp+0x3B0/0x3C0/0x3D0`, so the frame offset must stay concrete.
+pub const SELL_TOAST: &str = "45 33 C9 4C 89 6C 24 20 45 8B C4 48 8D 95 A0 03 00 00 48 8D 8B C8 6A 30 00 E8";
 /// `SELL_VOICE_AT`: toggles five-byte `E8` call to NOP (original rel32 captured at runtime).
-pub const SELL_VOICE: &str = "48 8D 55 80 66 0F 7F 45 80 48 8B CF E8";
+pub const SELL_VOICE: &str = "48 8D 54 24 70 66 0F 7F 44 24 70 48 8B CF E8";
 pub const VIEW: &str = "89 54 24 10 48 83 EC 28 48 8B 01 4C 8B 08 49 63 81 18 0B 00 00 83 F8 FF 74 36 4C 8B D0";
 pub const WALLET: &str = "48 8B 05 ? ? ? ? 48 05 70 0E 00 00 C3";
 

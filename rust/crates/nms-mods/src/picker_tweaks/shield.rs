@@ -2,7 +2,7 @@
 //! buttons, Enter, Esc) and anything pressed while the box is open.
 //!
 //! Per frame, in the page host
-//! `0x140905610`: (1) the frontend input builder `0x1401EAF20` turns the action table into button
+//! `0x1409152F0`: (1) the frontend input builder `0x140204570` turns the action table into button
 //! states (8 dwords at `state+0x34`, 0 none, 1 released, 2 pressed, 3 held; every page reads them
 //! through the pointer `G` the host stores at `+0x371`); (2) text `Update` (our after-hook);
 //! (3) the page and the item picker popup, whose layer also asks the action table directly
@@ -13,7 +13,7 @@
 //! So, from the after-hook, while our box is open and for the hold after it:
 //! - the frame's button states are cleared (no click, back, or hold for any page this frame);
 //! - every action pressed this frame is consumed exactly as the game's own query consumes it
-//!   (`row[0] = row[4] - 1`, `0x142C29B3F`), so "pressed this frame" asks after us return false;
+//!   (`row[0] = row[4] - 1`, `0x14185BE6D`), so "pressed this frame" asks after us return false;
 //! - after the box (hold frames) the context's reset frame is moved to now, as the game does when it
 //!   switches input context (`0x142C26A39`): "held" and "long press" asks then ignore a press that
 //!   started before, so a pad A still held after the box does not count as a hold either.
@@ -38,18 +38,20 @@ pub const FE_EXIT_MENU: usize = 0x4C;
 pub const CHAT_OPEN_CLOSE: usize = 0xF8;
 pub const CHAT_SEND: usize = 0xF9;
 
-/// Contexts: `controller + 0x4C0 + index * 0x410`, index at `controller + 0x18` (the query
-/// `0x142C29A70` with `ctxIndex = -1`; index 4 and above 5 mean "no context").
-const CONTEXTS: usize = 0x4C0;
-const CONTEXT_SIZE: usize = 0x410;
+/// Contexts: `controller + 0x5B0 + index * 0x470`, index at `controller + 0x18` (the query
+/// `0x142C97870` with `ctxIndex = -1`, context getter `0x142C98C60`; index 4 and above 5 mean "no
+/// context"). Build 181442 had `0x4C0 + index * 0x410`.
+const CONTEXTS: usize = 0x5B0;
+const CONTEXT_SIZE: usize = 0x470;
 const CONTEXT_INDEX: usize = 0x18;
-/// In a context: rows pointer, row count, current frame, reset frame.
+/// In a context: rows pointer, row count, current frame, reset frame (`0x14185BE10`, unchanged).
 const ROWS: usize = 0x10;
 const ROW_COUNT: usize = 0x18;
 const FRAME: usize = 0x20;
 const RESET_FRAME: usize = 0x24;
-/// One action row: press frame `+0`, last frame down `+4`.
-pub const ROW_SIZE: usize = 0x1C;
+/// One action row: press frame `+0`, last frame down `+4` (`lea r9,[rdi+rdi*2]; [rax+r9*8]` in
+/// `0x14185BE10`: 0x18 bytes since build 183791, 0x1C before).
+pub const ROW_SIZE: usize = 0x18;
 const ROWS_MAX: usize = 2048;
 /// Button states in the frontend input state: 8 dwords.
 const BUTTONS: usize = 0x34;
@@ -130,9 +132,10 @@ const CTX_KBM: usize = 0xA2;
 /// The controller's "text entry active" byte (`ctl+0x40`): 1 from the game's text `Start` until its
 /// close code (`0x1406DF855` / `0x1406E06A3`). The handler loop reads it every frame (`0x142C314D7`).
 const CTL_TEXT_ACTIVE: usize = 0x40;
-/// The action-set group the text box switches (`ctl+0x1500`): entry count `+0x3C`, entries `+0x40`;
-/// an entry has its set id at `+0` and "enabled" at `+0x49` (`0x142C27E00`).
-const CTL_SETS: usize = 0x1500;
+/// The action-set group the text box switches (`ctl+0x1770`, `0x1500` before build 183791): entry
+/// count `+0x3C`, entries `+0x40`; an entry has its set id at `+0` and "enabled" at `+0x49`
+/// (`0x142C95BF0`).
+const CTL_SETS: usize = nms_sdk::sigs::ingame_options::CONTROLLER_SETS as usize;
 const SETS_COUNT: usize = 0x3C;
 const SETS_ENTRIES: usize = 0x40;
 const SET_ENABLED: usize = 0x49;
@@ -221,7 +224,8 @@ pub fn held(bytes: &[u8], frame: i32, action: usize) -> bool {
     row(bytes, action).is_some_and(|(_, down)| down == frame)
 }
 
-/// Released since the last frame (query mode 3).
+/// Released since the last frame (query mode 3). Since build 183791 the game's mode 3 also needs the
+/// row byte `+0x12` clear (`0x14185BEF8`); this raw read does not look at it.
 pub fn released(bytes: &[u8], frame: i32, action: usize) -> bool {
     row(bytes, action).is_some_and(|(_, down)| down == frame.wrapping_sub(1))
 }
@@ -362,11 +366,17 @@ mod tests {
 
     #[test]
     fn field_offsets_match_the_disassembly() {
-        // Query 0x142C29A70: rows [ctl+idx*0x410+0x4D0], count +0x4D8, frame +0x4E0, reset +0x4E4.
-        assert_eq!(CONTEXTS + ROWS, 0x4D0);
-        assert_eq!(CONTEXTS + ROW_COUNT, 0x4D8);
-        assert_eq!(CONTEXTS + FRAME, 0x4E0);
-        assert_eq!(CONTEXTS + RESET_FRAME, 0x4E4);
+        // Query 0x142C97870 / context 0x14185BE10 (build 183791): context ctl+0x5B0+idx*0x470, rows
+        // +0x10, count +0x18, frame +0x20, reset +0x24, rows 0x18 bytes each.
+        assert_eq!(CONTEXTS + ROWS, 0x5C0);
+        assert_eq!(CONTEXTS + ROW_COUNT, 0x5C8);
+        assert_eq!(CONTEXTS + FRAME, 0x5D0);
+        assert_eq!(CONTEXTS + RESET_FRAME, 0x5D4);
+        assert_eq!(CONTEXT_SIZE, 0x470);
+        assert_eq!(ROW_SIZE, 0x18);
+        // The pad-mode byte KBM_QUERY reads: [ctl + idx*0x470 + 0x652].
+        assert_eq!(CONTEXTS + CTX_KBM, 0x652);
+        assert_eq!(CTL_SETS, 0x1770);
         // Builder: button states 0x34..0x50 inclusive.
         assert_eq!(BUTTONS + (BUTTON_COUNT - 1) * 4, 0x50);
     }

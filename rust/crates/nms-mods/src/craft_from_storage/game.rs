@@ -26,9 +26,10 @@ const FREE_BYTES: &[u8] = &[
 const OWNED_LISTS_AT: [usize; 2] = [0x49, 0x55];
 const NEARBY_IDS_AT: usize = 0x03;
 const NEARBY_COUNT_AT: usize = 0x09;
-const BASE_TYPES_AT: usize = 0x24;
-const OBJECT_TYPE_CALL_AT: usize = 0x3B;
-const BASE_CHESTS_CALL_AT: usize = 0x6C;
+// Build 183791 (BASE block grew by 1 byte before the mask and a 10-byte nop before the loop).
+const BASE_TYPES_AT: usize = 0x25;
+const OBJECT_TYPE_CALL_AT: usize = 0x46;
+const BASE_CHESTS_CALL_AT: usize = 0x77;
 const VIEW_GLOBAL_AT: usize = 0x64;
 const VIEW_GLOBAL_BYTES: &[u8] = &[0x48, 0x8B, 0x0D];
 const VIEW_CALL_AT: usize = 0x6B;

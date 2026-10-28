@@ -11,7 +11,8 @@ pub const SHOP_LIST_RESTORE: f64 = 0.5;
 pub const SHOP_BUYFOR_AT: usize = 16;
 pub const SHOP_CAVE_SLOT: usize = 16;
 pub const SHOP_CAVE_SIZE: usize = 0x100;
-pub const SHOP_BUY_AT: u64 = 0x194D8;
+/// Build 183791 (was 0x194D8): `lea r15, [r14+0x19538]` in the shop chrome, `movzx r8d, byte [rdi+0x19538]`.
+pub const SHOP_BUY_AT: u64 = 0x19538;
 pub const SHOP_PAGE_LEA_AT: usize = 0x44;
 pub const SHOP_PAGE_MODE_AT: u64 = 0x14488;
 pub const SHOP_PAGE_NEEDLE: &str = "InteractionShop";
@@ -20,7 +21,8 @@ pub const SHOP_UNITS_AT: u64 = 0x89C;
 pub const SHOP_ITEM_MAX_AT: u64 = 0x20;
 pub const SHOP_ITEM_TABLE_AT: u64 = 0x143D8;
 pub const SHOP_ROW_AT: u64 = 0x143F8;
-pub const SHOP_INV_AT: u64 = 0x194E4;
+/// Build 183791 (was 0x194E4): `SHOP_BUY_AT + 0xC`, constructor `mov dword [rdi+0x19544], -1`.
+pub const SHOP_INV_AT: u64 = 0x19544;
 pub const SHOP_PAGE_ELEMENT: u64 = 0x14478;
 pub const SHOP_LIST_LEA_AT: usize = 0;
 pub const SHOP_LIST_COUNT: u64 = 0x4;

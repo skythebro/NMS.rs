@@ -406,7 +406,7 @@ impl SlotsRuntime {
     fn page_busy(&self, page: u64) -> Option<i32> {
         let offset = match self.filter_field {
             Some(field) => (field as usize).wrapping_add(0x3C).wrapping_add(PAGE_BUSY_FROM_SCREEN),
-            None => 0x14C44,
+            None => 0x14C84,
         };
         read_i32((page as usize).wrapping_add(offset))
     }
@@ -809,7 +809,7 @@ impl SlotsRuntime {
         let selector = if page == 0 {
             "-".into()
         } else {
-            let words = read_dwords((page as usize).wrapping_add(0x19670), 4);
+            let words = read_dwords((page as usize).wrapping_add(FREIGHTER_SELECTOR), 4);
             super::ui::dword_text(words.first().copied().flatten())
         };
         let sig = ProbeSig {

@@ -17,9 +17,10 @@ pub const OBJ: &str = "48 8B 3D ? ? ? ? 45 0F B6 E0 48 8B F2 4C 8B F9 48 8B BF ?
 pub const HEAD: &str = "8B 56 40 4C 8D 85 ? ? ? ? 48 8D 88 D0 AA 00 00 E8 ? ? ? ? 48 8D 0D ? ? ? ? E8 ? ? ? ? \
 8B 56 40 49 C7 C0 FF FF FF FF 48 8D 88 D0 B3 00 00 E8 ? ? ? ? 48 8D 4E 44 48 89 4C 24 40 \
 48 8B D1 48 8B C8 E8 ? ? ? ?";
-/// The same row's loop ending in the real charge call.
+/// The same row's loop ending in the real charge call. `mov rax,[rbp+0x4218]` is the parent card kept in
+/// TriggerAction's frame (`0x41D8` before build 183791, which grew the frame by 0x40).
 pub const LOOP: &str = "48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8B 54 24 40 4C 8D 4E 18 48 8D 88 D0 AA 00 00 8B 46 20 \
-89 44 24 28 8B 06 89 44 24 20 48 8B 85 D8 41 00 00 44 8B 40 40 E8 ? ? ? ?";
+89 44 24 28 8B 06 89 44 24 20 48 8B 85 18 42 00 00 44 8B 40 40 E8 ? ? ? ?";
 pub const DTOR: &str = "40 53 48 83 EC 20 83 79 04 00 48 8B D9 76 07 C7 41 04 00 00 00 00 48 8B 51 08 48 85 D2 74 1F 41 B8 FF FF FF";
 /// Quick Menu name lookup for an item (product, substance, tech, GetText).
 pub const NAME: &str = "40 53 48 83 EC 20 80 79 08 00 48 8B D9 74 06 48 83 C3 10 EB 2B 48 8B 0D ? ? ? ? \

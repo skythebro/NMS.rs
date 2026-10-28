@@ -28,16 +28,17 @@ pub const GAME_SWITCHER: &str = "48 8B C4 55 53 56 57 41 54 41 55 41 56 41 57 48
 /// Finds a child element by name: `(element, &name16, recursive) -> element`. The page pass uses it
 /// for `WHITE`. The call at the end is relative, so the pattern stops before it.
 pub const FIND_CHILD: &str = "48 89 5C 24 08 57 48 83 EC 40 48 8B 99 50 01 00 00 41 0F B6 F8 45 33 C0 48 8D 4C 24 20 E8";
-/// `cGcFrontendPage::Confirm`: hover and click test for one element (same function the shop uses).
-pub const CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 44 4C 01 00 00";
+/// `cGcFrontendPage::Confirm` (`0x140901CF0`): hover and click test for one element (same function the
+/// shop uses). `cmp byte [rcx+0x14C84], 0` is the page's input byte (`0x14C44` before build 183791).
+pub const CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 84 4C 01 00 00";
 /// Inside `DoGameSwitcher`, at `BUSY_AT`: `mov rcx, [rip+disp32]`; at `BUSY_CHECK_AT`, two
-/// instructions later: `cmp byte [rcx+0x8594c2], 0`. The page skips its click tests while that byte is
-/// set (a popup is open); so do we.
+/// instructions later: `cmp byte [rcx+0x87fd5a], 0` (`0x8594c2` before build 183791). The page skips
+/// its click tests while that byte is set (a popup is open); so do we.
 pub const BUSY_AT: usize = 0xCCF;
 pub const BUSY_CHECK_AT: usize = 0xCEE;
 pub const BUSY_CODE: [u8; 3] = [0x48, 0x8B, 0x0D];
-pub const BUSY_CHECK: [u8; 7] = [0x80, 0xB9, 0xC2, 0x94, 0x85, 0x00, 0x00];
-pub const BUSY_OFFSET: usize = 0x8594C2;
+pub const BUSY_CHECK: [u8; 7] = [0x80, 0xB9, 0x5A, 0xFD, 0x87, 0x00, 0x00];
+pub const BUSY_OFFSET: usize = 0x87FD5A;
 /// Offset of the pause page's element table, the first argument of the name lookup.
 pub const TABLE_OFFSET: usize = 0x14478;
 
@@ -47,13 +48,19 @@ pub const TEXT_RESULT: &str = "48 89 5C 24 10 48 89 74 24 18 57 48 81 EC 80 00 0
 pub const TEXT_STOP: &str = "40 53 48 83 EC 30 33 DB 89 99 70 06 00 00 F3 0F 10 05 ? ? ? ? F3 0F 11 81 00 0B 00 00";
 pub const TEXT_UPDATE: &str = "48 8B C4 55 56 48 8D A8 38 FE FF FF 48 81 EC B8 02 00 00 83 B9 70 06 00 00 01";
 /// Inside `TEXT_UPDATE`, at this byte and `TEXT_CLOSE_LEN` long: the code that gives the keyboard back
-/// (`mov rax,[rip+app]`, `mov rcx,[rax+0x933b78]`, `mov [rcx+0x40],r12b`, `add rcx,0x1500`, `call set_actions`).
+/// (`mov rax,[rip+app]`, `mov rcx,[rax+<controller>]`, `mov [rcx+0x40],r12b`, `add rcx,0x1770`,
+/// `call set_actions`). Build 183791: controller `app+0x95AEB8`, action sets `ctl+0x1770` (`0x1500`
+/// before).
 pub const TEXT_CLOSE_AT: usize = 0x96D;
 pub const TEXT_CLOSE_LEN: usize = 38;
+/// The input controller's action-set group, the `add rcx, imm32` at byte 26 of the close code
+/// (`0x1500` before build 183791). Both the close-code check and the action-set calls use it.
+pub const CONTROLLER_SETS: u32 = 0x1770;
 
 /// The Options "go back" step (`bool` in `cl`): pops one page off the page stack. The press that closes
 /// the text box with B also reached this and left the page, so it is refused while our box is open.
-pub const OPTIONS_BACK: &str = "48 89 5C 24 08 57 48 83 EC 20 48 8B 1D ? ? ? ? 0F B6 F9 8B 83 98 54 87 00 85 C0 74 0E";
+/// `0x1406F4C30`; reads the app field `+0x89BD98` (`0x875498` before build 183791).
+pub const OPTIONS_BACK: &str = "48 89 5C 24 08 57 48 83 EC 20 48 8B 1D ? ? ? ? 0F B6 F9 8B 83 98 BD 89 00 85 C0 74 0E";
 
 /// `cmp dword [rip+disp32], imm8`: the page stack count. Displacement at byte 2, instruction 7 long.
 pub const STACK_COUNT: &str = "83 3D ? ? ? ? ? 0F 84 ? ? ? ? 48 89 9C 24 ? ? ? ? 48 8D 4C 24";

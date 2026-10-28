@@ -22,9 +22,10 @@ const SHOP_INV_FORCE: &[CodePatch] = &[
     },
     CodePatch {
         label: "Shop inv force",
-        sig: "84 D2 74 26 48 8B 8D 70 1E 00 00 48 81 C1 D8 43 01 00",
+        // Build 183791: frame slot 0x1E70 -> 0x1E60, and the store block one byte shorter (je +0x26 -> +0x25).
+        sig: "84 D2 74 25 48 8B 8D 60 1E 00 00 48 81 C1 D8 43 01 00",
         at: 2,
-        old: &[0x74, 0x26],
+        old: &[0x74, 0x25],
         new: &[0x90, 0x90],
     },
 ];

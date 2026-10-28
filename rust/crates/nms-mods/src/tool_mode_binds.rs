@@ -17,8 +17,9 @@
 //! leaves both sites vanilla, with a log line. On by default since the in-game test of 2026-10-13 passed.
 //!
 //! Only the "Change Secondary Weapon" submenu runs the filter cave: the level builder's jump table sends
-//! parent type `0x26` alone to `0x14152dec0`, and no other branch lands in that block. The Recharge
-//! submenu (`0x18`, case `0x14152bd86`, card helper `0x141530e70`) lists a weapon technology only when it
+//! parent type `0x26` alone to `0x141559e40` (build 183791: `add eax,-7`, byte table `0x14155a5c4`, only
+//! index `0x1F` selects that case), and no other branch lands in that block. The Recharge submenu (`0x18`,
+//! case `0x14152bd86`, card helper `0x141530e70` in build 180836) lists a weapon technology only when it
 //! is the tech of the current primary (`[W+0xF74]`) or secondary (`[W+0xF78]`), any charge: vanilla. A
 //! Mining Beam or Terrain Manipulator card there follows the primary the player picked.
 //!
@@ -402,9 +403,9 @@ fn swap(image: &mut ProcessImage, rva: usize, from: &[u8], to: &[u8], what: &str
     // Write order and tearing: `apply` writes the action call first and removes it last, so an
     // added row always routes through `qm_select`. A patch of at most 8 bytes that sits inside one
     // aligned 8-byte word is written with one 8-byte store (a thread running it sees the old or the
-    // new bytes, never a mix). On the exe this mod was checked on (88,560,712 bytes, FileVersion
-    // 180836, the build of the `locates_every_site_in_the_exe` test) the action call `0x14153a80f`
-    // starts at byte 7 of its word, so that branch is inert there and the plain write below runs.
+    // new bytes, never a mix). On the exe this mod was checked on (89,491,528 bytes, build 183791, the
+    // build of the `locates_every_site_in_the_exe` test) the action call `0x1415667af` starts at byte 7
+    // of its word (as `0x14153a80f` did in 180836), so that branch is inert there and the plain write below runs.
     // The 14-byte row-filter jump cannot be written atomically either. Both run only while the Quick
     // Menu builds or acts on its weapon rows, so a toggle at that exact moment is the remaining
     // (small) window, as for every byte patch. If `write_atomic` stored the bytes but could not
@@ -679,9 +680,9 @@ mod tests {
 
     #[test]
     fn filter_cave_keeps_vanilla_first_and_lands_on_both_exits() {
-        // Addresses from the disassembly: filter 0x14152dedd, join 0x14152deeb, skip 0x14152dfee.
+        // Addresses from the disassembly (build 183791): filter 0x141559e5d, join 0x141559e6b, skip 0x141559f43.
         let cave = 0x1_3000_0000usize;
-        let (join, skip) = (0x1_4152_DEEBusize, 0x1_4152_DFEEusize);
+        let (join, skip) = (0x1_4155_9E6Busize, 0x1_4155_9F43usize);
         let c = filter_cave(cave, join, skip).unwrap();
         assert_eq!(&c[..10], &[0x8B, 0x84, 0x87, 0x68, 0x0E, 0x00, 0x00, 0x44, 0x85, 0xF0]);
         assert_eq!(&c[10..12], &[0x0F, 0x85]);
@@ -700,12 +701,12 @@ mod tests {
 
     #[test]
     fn site_bytes() {
-        let site = 0x1_4152_DEDDusize;
+        let site = 0x1_4155_9E5Dusize;
         let j = filter_jump(site, site + 0x100).unwrap();
         assert_eq!(j[0], 0xE9);
         assert_eq!(target(&j, 1, site), site + 0x100);
         assert!(j[5..].iter().all(|&b| b == 0x90));
-        let c = call_to(0x1_4153_A80F, 0x1_4153_A80F + 0x40).unwrap();
+        let c = call_to(0x1_4156_67AF, 0x1_4156_67AF + 0x40).unwrap();
         assert_eq!(c, [0xE8, 0x3B, 0, 0, 0]);
         assert!(filter_jump(0x1000, 0x7FFF_FFFF_0000).is_err());
         let s = abs_jump(0x1122_3344_5566_7788);
@@ -737,14 +738,14 @@ mod tests {
         let Some(exe) = exe else { return };
         let image = nms_core::FileImage::load(&exe).unwrap();
         let at = locate(&image).unwrap();
-        // Exe of 88,560,712 bytes, FileVersion 180836.
-        assert_eq!(at.filter, 0x152DEDD);
-        assert_eq!(at.join, 0x152DEEB);
-        assert_eq!(at.skip, 0x152DFEE);
-        assert_eq!(at.global, 0x6E8D708);
-        assert_eq!(at.select, 0x140F100);
-        assert_eq!(at.action, 0x153A80F);
-        assert_eq!(at.set_primary, 0x1409FA0);
+        // Exe of 89,491,528 bytes, build 183791.
+        assert_eq!(at.filter, 0x1559E5D);
+        assert_eq!(at.join, 0x1559E6B);
+        assert_eq!(at.skip, 0x1559F43);
+        assert_eq!(at.global, 0x6F60828);
+        assert_eq!(at.select, 0x1435AF0);
+        assert_eq!(at.action, 0x15667AF);
+        assert_eq!(at.set_primary, 0x1430990);
         let base = 0x1_4000_0000usize;
         let cave = base + 0x7000_0000;
         let body = filter_cave(cave, base + at.join, base + at.skip).unwrap();

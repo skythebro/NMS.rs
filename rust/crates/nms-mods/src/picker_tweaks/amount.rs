@@ -2,13 +2,14 @@
 //!
 //! Two controls, both written where the game itself changes them, on the game's thread:
 //! - Stack split (also machine-slot amounts and the Transfer picker, `page_mode` 1): the held
-//!   stack struct at `page+0x19610`, amount `page+0x19628`. Written in a before-hook on the per-frame
-//!   held-stack tick `0x1408F0DF0`, clamped to `[1, element Amount]`; the game's own drop then moves
-//!   that many (it reads `page+0x19628`, as after its own arrow presses).
+//!   stack struct at `page+0x19670`, amount `page+0x19688` (`0x19610`/`0x19628` before build 183791).
+//!   Written in a before-hook on the per-frame held-stack tick `0x1409000B0`, clamped to
+//!   `[1, element Amount]`; the game's own drop then moves that many (it reads `page+0x19688`, as after
+//!   its own arrow presses).
 //! - Refiner amount: `(unit+0x2A0 >> 3) & 0xFFF`, written only through the game's setter
-//!   `0x1410B53D0(unit, n)` in a before-hook on the refiner page prologue `0x140825110`, clamped to
-//!   the same bounds the page gives its arrows: `[min, min + extra]` with `min = 0x1410B5210(unit)`
-//!   and `extra = 0x1410B5320(unit)` (read at `0x140827454..0x140827467`).
+//!   `0x1410D7D50(unit, n)` in a before-hook on the refiner page prologue `0x14081F1A0`, clamped to
+//!   the same bounds the page gives its arrows: `[min, min + extra]` with `min = 0x1410D7B90(unit)`
+//!   and `extra = 0x1410D7CA0(unit)`.
 //!
 //! Craft amount and the shop slider are out of scope (the shop is TradeUITweaks').
 
@@ -19,13 +20,15 @@ use nms_core::mem::{read_bytes, read_i32, read_ptr, read_u32, readable, MIN_ADDR
 
 use super::{log_line, now_ms, TYPED_QTY};
 
-/// Held stack struct `S = page + 0x19610`: amount `S+0x18`, slot `S+0x30/+0x34`, inventory `S+0x40`.
-const HELD_AMOUNT: usize = 0x19628;
-const HELD_X: usize = 0x19640;
-const HELD_Y: usize = 0x19644;
-const HELD_INV: usize = 0x19650;
+/// Held stack struct `S = page + 0x19670`: amount `S+0x18`, slot `S+0x30/+0x34`, inventory `S+0x40`.
+/// Build 183791 moved the struct by 0x60 (`0x19610` before): the held tick `0x1409000B0` reads
+/// `[rbp+0x196B0]`, `[rbp+0x196A0]`, `[rbp+0x196A4]` and halves `[rbp+0x19688]` (`0x1409007B2..0x1409007F4`).
+const HELD_AMOUNT: usize = 0x19688;
+const HELD_X: usize = 0x196A0;
+const HELD_Y: usize = 0x196A4;
+const HELD_INV: usize = 0x196B0;
 /// Inventory store: element count `+0x8C`, element array `+0x90` (0x30 bytes each: slot x `+0x10`,
-/// y `+0x14`, Amount `+0x18`), as `GetElement 0x1404C5B40` walks it.
+/// y `+0x14`, Amount `+0x18`), as `GetElement 0x1404CE7F0` walks it (amount read at `0x14090084D`).
 const STORE_COUNT: usize = 0x8C;
 const STORE_DATA: usize = 0x90;
 const ELEMENT: usize = 0x30;
@@ -198,7 +201,7 @@ fn apply_refiner(unit: usize) {
         return;
     };
     // SAFETY: the bounds routines and the setter the refiner page itself calls every frame
-    // (0x140827454..0x140827467 and 0x1408276F0), with the machine object it uses.
+    // every frame, with the machine object it uses.
     let (min, extra) = unsafe {
         (
             std::mem::transmute::<usize, CountFn>(f.min)(unit),
@@ -237,7 +240,7 @@ pub unsafe extern "system" fn held_detour(page: usize, dt: f32) -> u64 {
 pub unsafe extern "system" fn refiner_detour(this: usize, page: usize) -> u64 {
     if TYPED_QTY.load(Ordering::Acquire) && page >= MIN_ADDR {
         if let Some(f) = REFINER_FNS.get() {
-            // SAFETY: the same call `RefinerPage` makes first (`0x140825138`); a component lookup.
+            // SAFETY: the same call `RefinerPage` makes first (`0x14081F1C8`); a component lookup.
             let unit = std::mem::transmute::<usize, UnitFn>(f.getter)(page);
             if unit >= MIN_ADDR && readable(unit + REFINER_AMOUNT, 2) {
                 REFINER_PAGE.store(page, Ordering::Release);

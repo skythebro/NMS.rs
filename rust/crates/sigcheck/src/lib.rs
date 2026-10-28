@@ -25,6 +25,11 @@ pub const KNOWN: &[(&str, &str, &str)] = &[
     ),
     ("PulseTweaks", "OBS", "withdrawn patch, never applied; pattern hard-codes a call rel32"),
     ("PulseTweaks", "Pulse in atmosphere (path obstruct)", "withdrawn patch, never applied; uses OBS"),
+    (
+        "PickerTweaks",
+        "FRONTEND_TEXT_SNAP",
+        "build 183791 removed the builder's text-box snap check; cursor write-back stays off (cursor.rs)",
+    ),
 ];
 
 pub fn known_reason(line: &Line) -> Option<&'static str> {

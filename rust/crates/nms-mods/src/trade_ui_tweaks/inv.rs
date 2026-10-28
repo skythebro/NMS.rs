@@ -34,9 +34,10 @@ const SHOP_FREE_AT: usize = 0x6CD;
 const SHOP_FREE_BYTES: &[u8] = &[0x41, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0x48, 0x8D, 0x4D, 0xF0, 0x48, 0x8B, 0xD7, 0xE8];
 const SHOP_NEARBY_IDS_AT: usize = 0x03;
 const SHOP_NEARBY_COUNT_AT: usize = 0x09;
-const SHOP_BASE_TYPES_AT: usize = 0x24;
-const SHOP_OBJECT_TYPE_CALL_AT: usize = 0x3B;
-const SHOP_BASE_CHESTS_CALL_AT: usize = 0x6C;
+// Build 183791 (was 0x24 / 0x3B / 0x6C): offsets into the SHOP_BASE hit, all inside the fixed-length pattern.
+const SHOP_BASE_TYPES_AT: usize = 0x25;
+const SHOP_OBJECT_TYPE_CALL_AT: usize = 0x46;
+const SHOP_BASE_CHESTS_CALL_AT: usize = 0x77;
 
 type HasInvFn = unsafe extern "system" fn(u64, u32) -> u8;
 type ClearFn = unsafe extern "system" fn(u64) -> u64;

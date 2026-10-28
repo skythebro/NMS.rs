@@ -16,8 +16,11 @@ use nms_sdk::sigs::ingame_options as sigs;
 
 /// Offset of the manager's state (0 idle, 1 open, 2 result ready, 3 and 4 profanity check).
 const STATE: usize = 0x670;
-/// Offset of the text manager inside the application object.
-const MGR_OFFSET: usize = 0x859970;
+/// Offset of the text manager inside the application object (`0x859970` before build 183791; see
+/// `TEXT_MGR_OFFSET` in `common/options_menu.rs` for where it was read).
+const MGR_OFFSET: usize = 0x880208;
+/// The input controller's action-set group (`ctl+0x1770`, `0x1500` before build 183791).
+const CTL_SETS: usize = sigs::CONTROLLER_SETS as usize;
 /// The longest text the player can type.
 const TYPED_MAX: u32 = 40;
 
@@ -53,7 +56,8 @@ pub fn locate(image: &ProcessImage) -> Result<(), String> {
         && fixed(7..18, &[0x41, 0xB0, 0x01, 0xBA, 0x01, 0x00, 0x00, 0x00, 0x48, 0x8B, 0x88])
         && code.get(18..22).is_some_and(context::controller_disp_matches)
         && fixed(22..26, &[0x44, 0x88, 0x61, 0x40])
-        && fixed(26..33, &[0x48, 0x81, 0xC1, 0x00, 0x15, 0x00, 0x00])
+        && fixed(26..29, &[0x48, 0x81, 0xC1])
+        && fixed(29..33, &sigs::CONTROLLER_SETS.to_le_bytes()[..])
         && code.get(33) == Some(&0xE8))
     {
         return Err("text popup close code changed (game update?)".into());
@@ -205,7 +209,7 @@ pub fn state(mgr: usize) -> Option<u32> {
 
 /// Switch action set 1 on or off without touching the "text entry active" byte (`ctl+0x40`). The
 /// hold after our box uses this: that byte belongs to an open text box only (the controller's
-/// handler loop reads it every frame, `0x142C314D7`), and no box is open during the hold.
+/// handler loop reads it every frame), and no box is open during the hold.
 pub fn set_action_set(enabled: bool) -> bool {
     let set_actions = SET_ACTIONS.load(Ordering::Acquire);
     let Some(controller) = controller() else { return false };
@@ -216,7 +220,7 @@ pub fn set_action_set(enabled: bool) -> bool {
     // it only flips `[entry+0x49]` on the entries of set 1.
     unsafe {
         let set_actions: SetActionsFn = std::mem::transmute(set_actions);
-        set_actions((controller + 0x1500) as u64, 1, u8::from(enabled));
+        set_actions((controller + CTL_SETS) as u64, 1, u8::from(enabled));
     }
     true
 }
@@ -234,7 +238,7 @@ pub fn set_input(enabled: bool) {
     unsafe {
         let _ = nms_core::mem::write(controller + 0x40, u8::from(!enabled));
         let set_actions: SetActionsFn = std::mem::transmute(set_actions);
-        set_actions((controller + 0x1500) as u64, 1, u8::from(enabled));
+        set_actions((controller + CTL_SETS) as u64, 1, u8::from(enabled));
     }
 }
 
