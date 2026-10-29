@@ -107,8 +107,20 @@ pub fn stock_names(root: &Path) -> Vec<String> {
     names
 }
 
+/// `<mod>_preset.json` at the top of a size mod: the size its UI files were built for. It belongs
+/// with those files, not with the user's settings, so it is copied and kept the way they are.
+fn is_size_preset(mod_name: &str, rel: &Path) -> bool {
+    let name = rel.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
+    SIZE_MODS.contains(&mod_name) && rel.components().count() == 1 && name.ends_with("_preset.json")
+}
+
 fn skip_update_file(mod_name: &str, rel: &Path, skip_size_ui: bool) -> bool {
     let name = rel.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
+    if is_size_preset(mod_name, rel) {
+        // The mod reads it at start and stays vanilla without it. Install copies it with the
+        // stock UI files; update keeps the one Apply sizes wrote (see `copy_stock_files`).
+        return skip_size_ui;
+    }
     if name.ends_with(".json") || name.ends_with(".log") {
         return true;
     }
@@ -246,6 +258,14 @@ pub fn is_outdated(root: &Path, name: &str, folder: &Path) -> bool {
     if !src.is_dir() || !folder.is_dir() {
         return false;
     }
+    // A size mod without its preset stays vanilla (installs before 4.0.3 never copied it).
+    let preset_missing = fs::read_dir(&src).into_iter().flatten().flatten().any(|e| {
+        let rel = PathBuf::from(e.file_name());
+        is_size_preset(name, &rel) && !folder.join(&rel).exists()
+    });
+    if preset_missing {
+        return true;
+    }
     let wanted = fingerprint(&src, name);
     if wanted.is_empty() {
         return false;
@@ -287,10 +307,12 @@ fn copy_stock_files(src: &Path, dest: &Path, name: &str, skip_size_ui: bool) -> 
         let Ok(rel) = path.strip_prefix(src) else {
             continue;
         };
-        if skip_update_file(name, rel, skip_size_ui) {
+        let out = dest.join(rel);
+        // Installs before 4.0.3 never copied the preset; an update adds it when it is missing.
+        let missing_preset = is_size_preset(name, rel) && !out.exists();
+        if skip_update_file(name, rel, skip_size_ui) && !missing_preset {
             continue;
         }
-        let out = dest.join(rel);
         if let Some(parent) = out.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
@@ -688,6 +710,36 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static TEMP_N: AtomicU32 = AtomicU32::new(0);
+
+    #[test]
+    fn size_preset_installs_and_survives_updates() {
+        let sis = "SmallerInventorySlots";
+        let preset = "smaller_inventory_slots_preset.json";
+        let root = temp_root("preset");
+        let src = stock_dir(&root).join(sis);
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join(preset), b"{\"scale\": 0.7}").unwrap();
+        fs::write(src.join("smaller_inventory_slots.json"), b"{}").unwrap();
+        fs::write(src.join("SmallerInventorySlots.lua"), b"-- lua").unwrap();
+
+        // Install copies the preset (it did not before 4.0.3), never a settings file.
+        install_mod(&root, sis, false).unwrap();
+        let live = mods_dir(&root).join(sis);
+        assert!(live.join(preset).is_file());
+        assert!(!live.join("smaller_inventory_slots.json").exists());
+
+        // Update keeps the preset Apply sizes wrote.
+        fs::write(live.join(preset), b"{\"scale\": 0.5}").unwrap();
+        update_mod(&root, sis, false).unwrap();
+        assert_eq!(fs::read(live.join(preset)).unwrap(), b"{\"scale\": 0.5}");
+
+        // An older install without it is outdated, and update adds it.
+        fs::remove_file(live.join(preset)).unwrap();
+        assert!(is_outdated(&root, sis, &live));
+        update_mod(&root, sis, false).unwrap();
+        assert_eq!(fs::read(live.join(preset)).unwrap(), b"{\"scale\": 0.7}");
+        let _ = fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn update_keeps_size_ui_but_copies_textures() {

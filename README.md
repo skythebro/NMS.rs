@@ -9,7 +9,7 @@ Every change to game behaviour is a live switch on the in-game Mods page (Option
 Every patch is found by a unique byte signature and checked before it is written: if the game
 code moved after an update, that part stays off and the game stays vanilla.
 
-Targets game build **183791**. Version 4.0.3.
+Targets game build **183877**. Version 4.0.4.
 
 ## Mods
 
@@ -59,8 +59,8 @@ cd NMS.rs\rust
 cargo test --workspace
 cargo clippy --workspace --all-targets
 cd ..
-py -3 release.py rust-build --version 4.0.3
-py -3 release.py rust --version 4.0.3 --out %TEMP%\nmsrs-zip
+py -3 release.py rust-build --version 4.0.4
+py -3 release.py rust --version 4.0.4 --out %TEMP%\nmsrs-zip
 ```
 
 `rust-build` builds `nms-rs.exe` and `xinput9_1_0.dll` with the `dist` profile (no debug info, no

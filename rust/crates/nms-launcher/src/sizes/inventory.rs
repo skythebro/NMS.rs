@@ -353,7 +353,24 @@ fn chest_jobs(plan: Plan) -> Vec<Job> {
     ]
 }
 
+/// Remove the top-level `PICKING` layer (build 183791 added it: the "Transfer to other
+/// Inventories" bar). On a page built here the game shows that layer all the time, and it hides
+/// the whole side bar (filters, sort, Deposit, Lock). Tested in game on 183877: the same page
+/// without it shows the side bar and the transfer still works. The stock files never had it.
+/// Returns how many layers were removed (0 on older builds).
+fn drop_picking_layer(root: &mut Element) -> usize {
+    let Some(children) = xml::prop_mut(root, "Children") else {
+        return 0;
+    };
+    let before = xml::el_count(children);
+    children
+        .children
+        .retain(|node| node.as_element().map_or(true, |entry| xml::element_id(entry) != Some("PICKING")));
+    before - xml::el_count(children)
+}
+
 fn page(root: &mut Element, plan: &Plan, filters: bool) -> Result<(), String> {
+    drop_picking_layer(root);
     if !plan.vanilla() {
         page_transform(root, plan)?;
         if set_headers(root, plan)? != 2 {
@@ -1074,6 +1091,30 @@ mod tests {
     use super::*;
     use crate::tools::Tools;
     use std::path::PathBuf;
+
+    #[test]
+    fn page_drops_only_the_picking_layer() {
+        let layer = |id: &str| {
+            format!(
+                "<Property name=\"Children\" value=\"GcNGuiLayerData\"><Property name=\"GcNGuiLayerData\">\
+                 <Property name=\"Element Data\" value=\"GcNGuiElementData\"><Property name=\"ID\" value=\"{id}\" />\
+                 </Property></Property></Property>"
+            )
+        };
+        let text = format!(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Data template=\"cGcNGuiLayerData\">\
+             <Property name=\"Children\">{}{}{}</Property></Data>",
+            layer("NORMAL"),
+            layer("ALT"),
+            layer("PICKING")
+        );
+        let mut doc = Mxml::parse(&text).expect("parse");
+        assert_eq!(drop_picking_layer(doc.root_mut()), 1);
+        let kids = xml::prop(doc.root(), "Children").unwrap();
+        let ids: Vec<&str> = xml::element_children(kids).filter_map(element_id).collect();
+        assert_eq!(ids, ["NORMAL", "ALT"]);
+        assert_eq!(drop_picking_layer(doc.root_mut()), 0, "older pages have none");
+    }
 
     #[test]
     fn plan_for_numbers() {
