@@ -98,6 +98,8 @@ struct Ui {
     clear: *const u8,
     clear_desc: *const u8,
     no_edit: *const u8,
+    /// Main-menu text-row value: explains why the native disabled row cannot open a popup.
+    load_to_edit: *const u8,
     /// Hint shown in a text row whose value is empty (a plain string: it is part of the cell text).
     not_set: String,
 }
@@ -136,6 +138,9 @@ static LOG: OnceLock<Arc<Log>> = OnceLock::new();
 static HEADER: AtomicUsize = AtomicUsize::new(0);
 static BUTTON: AtomicUsize = AtomicUsize::new(0);
 static BOOLEAN: AtomicUsize = AtomicUsize::new(0);
+/// Validated native page field: nonzero disables interaction and selects the row's disabled style.
+/// Zero means its code layout did not validate, so only the explicit message/click guard is used.
+static ROW_DISABLED_OFFSET: AtomicUsize = AtomicUsize::new(0);
 static INT: AtomicUsize = AtomicUsize::new(0);
 static FLOAT: AtomicUsize = AtomicUsize::new(0);
 static BEGIN_LIST: AtomicUsize = AtomicUsize::new(0);
@@ -273,6 +278,14 @@ pub fn install(image: &ProcessImage, registry: Arc<Registry>, log: Arc<Log>) {
     }
     let _ = REGISTRY.set(registry.clone());
     let _ = LOG.set(log.clone());
+    let boolean = BOOLEAN.load(Ordering::Acquire) - image.base();
+    match row_disabled_offset(image, boolean) {
+        Some(offset) => {
+            ROW_DISABLED_OFFSET.store(offset, Ordering::Release);
+            log.info("in-game Mods menu: native disabled text-row styling ready");
+        }
+        None => log.info("in-game Mods menu: disabled row styling unavailable; main-menu text edits remain blocked"),
+    }
     match install_text(image) {
         Ok(()) => log.info("in-game Mods menu: text rows ready (game text-entry popup)"),
         Err(e) => log.info(&format!("in-game Mods menu: no text rows: {e}")),
@@ -386,6 +399,50 @@ fn text_close_rvas(image: &dyn Code, update: usize, controller_offset: u32) -> R
         return Err("text popup targets outside readable data or executable code".into());
     }
     Ok((app_global, set_actions))
+}
+
+/// BOOLEAN calls the native row-interaction helper with the page in RDX. Build 184271's
+/// helper reads its disabled field with `mov r14d,[rdx+0x18]`, selects DISABLE/DISABLED
+/// visual states and skips hit tests while nonzero. Check the call and helper before using it.
+fn row_disabled_offset(image: &dyn Code, boolean: usize) -> Option<usize> {
+    if image.read(boolean + 0x7F, 9)?.as_slice() != [0x48, 0x8B, 0xD6, 0x48, 0x8D, 0x4C, 0x24, 0x40, 0xE8] {
+        return None;
+    }
+    let helper = image.rel32_target(boolean + 0x88)?;
+    let expected = [
+        0x48, 0x89, 0x5C, 0x24, 0x10, 0x44, 0x89, 0x44, 0x24, 0x18,
+        0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+        0x48, 0x8D, 0x6C, 0x24, 0xD9, 0x48, 0x81, 0xEC, 0x90, 0, 0, 0,
+        0x44, 0x8B, 0x72, 0x18,
+    ];
+    (image.read(helper, expected.len())?.as_slice() == expected).then_some(0x18)
+}
+
+/// Limit the native disabled state to one widget call; preserve any pre-existing disabled scope.
+struct DisabledRow {
+    address: usize,
+    previous: u32,
+}
+
+impl DisabledRow {
+    fn enter(page: usize, offset: usize) -> Option<Self> {
+        if offset == 0 {
+            return None;
+        }
+        let address = page.checked_add(offset)?;
+        let previous = read_u32(address)?;
+        // SAFETY: offset was validated from the native helper; this is a live Options page.
+        unsafe { nms_core::mem::write(address, 1u32) }.then_some(Self { address, previous })
+    }
+}
+
+impl Drop for DisabledRow {
+    fn drop(&mut self) {
+        // SAFETY: same page field, restored immediately after its synchronous widget call.
+        if !unsafe { nms_core::mem::write(self.address, self.previous) } {
+            info("could not restore Options page disabled state");
+        }
+    }
 }
 
 /// Refuse the Options page's "go back" while our text box is open: the press that closes the box with
@@ -577,6 +634,7 @@ fn build(registry: &Registry, lang: &'static str) -> Built {
         clear: text("clear"),
         clear_desc: text("clear_desc"),
         no_edit: text("no_edit"),
+        load_to_edit: text("load_to_edit"),
         not_set: menu_text::ui(lang, "not_set").to_string(),
     };
     Built { lang, ui, sections: build_sections(registry, lang) }
@@ -859,21 +917,27 @@ fn draw_text(
     // SAFETY: unique signature match of the nmspy `Boolean`.
     let boolean: BooleanFn = unsafe { std::mem::transmute(BOOLEAN.load(Ordering::Acquire)) };
     let value = shown_value.and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
-    let ptr = {
+    let editable = OPENED_IN_GAME.load(Ordering::Acquire);
+    let ptr = if editable {
         let Ok(mut shown) = row.shown.lock() else { return None };
         if shown.value != value || shown.ptr.is_null() {
             shown.ptr = leak_cstr(&cell_text(&value, &ui.not_set));
             shown.value = value.clone();
         }
         shown.ptr
+    } else {
+        ui.load_to_edit
     };
-    // The cell shows the value in both states; the row is shown as "off", so any click comes back as "on".
     let cell = BooleanOptions { enabled: ptr, disabled: ptr };
-    let editable = OPENED_IN_GAME.load(Ordering::Acquire);
     let desc = if editable { row.desc } else { ui.no_edit };
     // Shown as "off" (0); the default is 1 while the text differs from its default, so Reset stays enabled.
     let differs = row.default.as_ref().and_then(|d| d.as_str()).is_some_and(|d| d != value);
-    let clicked = unsafe { boolean(page, row.label, desc, 0, u8::from(differs), &cell) } & 1 != 0;
+    let clicked = {
+        let _disabled = (!editable)
+            .then(|| DisabledRow::enter(page as usize, ROW_DISABLED_OFFSET.load(Ordering::Acquire)))
+            .flatten();
+        (unsafe { boolean(page, row.label, desc, 0, u8::from(differs), &cell) } & 1) != 0
+    };
     if clicked && !waiting && editable {
         // The popup starts from the staged value if there is one, so an edit builds on it.
         if let Ok(mut click) = TEXT_CLICK.lock() {
@@ -1261,6 +1325,7 @@ mod tests {
         let layout = nms_core::game::resolve(&image).unwrap();
         let unique = |pattern: &str| image.find_unique(&Pattern::parse(pattern).unwrap()).unique().unwrap();
         let update = unique(sigs::TEXT_UPDATE);
+        assert_eq!(row_disabled_offset(&image, unique(sigs::BOOLEAN)), Some(0x18));
         for pattern in [sigs::TEXT_START, sigs::TEXT_RESULT, sigs::TEXT_STOP] {
             unique(pattern);
         }
@@ -1309,5 +1374,46 @@ mod tests {
         assert_eq!(cell_text("ion battery", "(not set)"), "ion battery");
         assert!(cell_text(&"x".repeat(80), "(not set)").ends_with("..."));
         assert_eq!(cell_text("  ", "(not set)"), "(not set)");
+    }
+
+    #[test]
+    fn disabled_row_restores_the_previous_scope_and_leaves_other_fields_alone() {
+        for previous in [0u32, 7] {
+            let mut page = [42u32; 12];
+            page[6] = previous;
+            let original = page;
+            let address = page.as_mut_ptr() as usize;
+            {
+                let _disabled = DisabledRow::enter(address, 0x18).unwrap();
+                assert_eq!(page[6], 1);
+                assert_eq!(page[5], 42);
+                assert_eq!(page[7], 42);
+            }
+            assert_eq!(page, original);
+            assert!(DisabledRow::enter(address, 0).is_none());
+            assert_eq!(page, original);
+        }
+        assert!(DisabledRow::enter(0, 0x18).is_none());
+    }
+
+    #[test]
+    fn row_disabled_layout_rejects_a_changed_page_field_or_call() {
+        let mut bytes = vec![0xCC; 0x300];
+        bytes[0x7F..0x88].copy_from_slice(&[0x48, 0x8B, 0xD6, 0x48, 0x8D, 0x4C, 0x24, 0x40, 0xE8]);
+        bytes[0x88..0x8C].copy_from_slice(&(0x180i32 - 0x8C).to_le_bytes());
+        let helper = [
+            0x48, 0x89, 0x5C, 0x24, 0x10, 0x44, 0x89, 0x44, 0x24, 0x18,
+            0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+            0x48, 0x8D, 0x6C, 0x24, 0xD9, 0x48, 0x81, 0xEC, 0x90, 0, 0, 0,
+            0x44, 0x8B, 0x72, 0x18,
+        ];
+        bytes[0x180..0x180 + helper.len()].copy_from_slice(&helper);
+        let image = FileImage::from_code(&bytes);
+        assert_eq!(row_disabled_offset(&image, 0), Some(0x18));
+        for at in [0x87, 0x180 + helper.len() - 1] {
+            let mut changed = image.clone();
+            changed.write(at, &[0xFF]).unwrap();
+            assert_eq!(row_disabled_offset(&changed, 0), None);
+        }
     }
 }
