@@ -345,23 +345,12 @@ fn install_text(image: &ProcessImage) -> Result<(), String> {
     let update = find(image, "text popup update", sigs::TEXT_UPDATE)?;
     // The code at the end of `Update` that gives the keyboard back to the game: it names the
     // application global and the "switch action set" routine we need to undo a popup that is left open.
-    let close = update + sigs::TEXT_CLOSE_AT;
-    let code = image.read(close, sigs::TEXT_CLOSE_LEN).ok_or("text popup update unreadable")?;
-    let fixed = |range: std::ops::Range<usize>, want: &[u8]| code.get(range).is_some_and(|b| b == want);
-    if !(code.len() >= 38
-        && fixed(0..3, &[0x48, 0x8B, 0x05])
-        && fixed(7..18, &[0x41, 0xB0, 0x01, 0xBA, 0x01, 0x00, 0x00, 0x00, 0x48, 0x8B, 0x88])
-        && code.get(18..22).is_some_and(super::context::controller_disp_matches)
-        && fixed(22..26, &[0x44, 0x88, 0x61, 0x40])
-        && fixed(26..29, &[0x48, 0x81, 0xC1])
-        && fixed(29..33, &sigs::CONTROLLER_SETS.to_le_bytes()[..])
-        && code.get(33) == Some(&0xE8))
-    {
-        return Err("text popup close code changed (game update?)".into());
+    let (app_global, set_actions) = text_close_rvas(image, update, super::context::controller_offset())?;
+    if nms_core::game::live::get().is_some_and(|g| g.layout().data_slot != app_global) {
+        return Err("text popup application pointer disagrees with game context".into());
     }
-    APP_GLOBAL.store(rip_target(image, close, 3, 7).ok_or("application pointer unreadable")?, Ordering::Release);
-    let rel = i32::from_le_bytes([code[34], code[35], code[36], code[37]]);
-    SET_ACTIONS.store((image.va(close + 38) as i64 + i64::from(rel)) as usize, Ordering::Release);
+    APP_GLOBAL.store(image.va(app_global), Ordering::Release);
+    SET_ACTIONS.store(image.va(set_actions), Ordering::Release);
     text_input_update::subscribe(image, sigs::TEXT_UPDATE, None, Some(on_text_update))?;
     // Give held input back from the core's per-frame tick too, so it can never stay off in a game
     // state that does not run the text box update. Optional: the text update still does it.
@@ -369,6 +358,34 @@ fn install_text(image: &ProcessImage) -> Result<(), String> {
     install_back_guard(image)?;
     TEXT_READY.store(true, Ordering::Release);
     Ok(())
+}
+
+/// Decode only checked build-184271 instructions. Shared by live installation and read-only tests.
+/// Results are RVAs, so relative addresses are handled identically offline and with ASLR.
+fn text_close_rvas(image: &dyn Code, update: usize, controller_offset: u32) -> Result<(usize, usize), String> {
+    if image.read(update + sigs::TEXT_INIT_AT, sigs::TEXT_INIT.len()).as_deref() != Some(sigs::TEXT_INIT) {
+        return Err("text popup register initialization changed (game update?)".into());
+    }
+    let close = update + sigs::TEXT_CLOSE_AT;
+    let code = image.read(close, sigs::TEXT_CLOSE_LEN).ok_or("text popup update unreadable")?;
+    let fixed = |range: std::ops::Range<usize>, want: &[u8]| code.get(range).is_some_and(|b| b == want);
+    if !(code.len() == 36
+        && fixed(0..3, &[0x48, 0x8B, 0x05])
+        && fixed(7..16, &[0x41, 0xB0, 0x01, 0x41, 0x8B, 0xD7, 0x48, 0x8B, 0x88])
+        && fixed(16..20, &controller_offset.to_le_bytes())
+        && fixed(20..24, &[0x44, 0x88, 0x69, 0x40])
+        && fixed(24..27, &[0x48, 0x81, 0xC1])
+        && fixed(27..31, &sigs::CONTROLLER_SETS.to_le_bytes())
+        && code.get(31) == Some(&0xE8))
+    {
+        return Err("text popup close code changed (game update?)".into());
+    }
+    let app_global = image.rel32_target(close + 3).ok_or("application pointer unreadable")?;
+    let set_actions = image.rel32_target(close + 32).ok_or("input action target unreadable")?;
+    if image.read(app_global, 8).is_none() || !image.exec_ranges().iter().any(|r| r.contains(&set_actions)) {
+        return Err("text popup targets outside readable data or executable code".into());
+    }
+    Ok((app_global, set_actions))
 }
 
 /// Refuse the Options page's "go back" while our text box is open: the press that closes the box with
@@ -1183,6 +1200,82 @@ fn on_switcher(args: &options_game_switcher::Args, _ret: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nms_core::FileImage;
+
+    fn text_fixture(update: usize) -> FileImage {
+        let mut bytes = vec![0xCC; 0x2000];
+        bytes[update + sigs::TEXT_INIT_AT..update + sigs::TEXT_INIT_AT + sigs::TEXT_INIT.len()]
+            .copy_from_slice(sigs::TEXT_INIT);
+        let close = update + sigs::TEXT_CLOSE_AT;
+        let code: [u8; 36] = [
+            0x48, 0x8B, 0x05, 0, 0, 0, 0, 0x41, 0xB0, 1, 0x41, 0x8B, 0xD7,
+            0x48, 0x8B, 0x88, 0xB8, 0xAF, 0x95, 0, 0x44, 0x88, 0x69, 0x40,
+            0x48, 0x81, 0xC1, 0x70, 0x17, 0, 0, 0xE8, 0, 0, 0, 0,
+        ];
+        bytes[close..close + code.len()].copy_from_slice(&code);
+        for (operand, target) in [(close + 3, 0x1800i32), (close + 32, 0x1400i32)] {
+            bytes[operand..operand + 4].copy_from_slice(&(target - operand as i32 - 4).to_le_bytes());
+        }
+        FileImage::from_code(&bytes)
+    }
+
+    #[test]
+    fn text_cleanup_decodes_relative_targets_at_different_locations() {
+        for update in [0, 0x100] {
+            assert_eq!(text_close_rvas(&text_fixture(update), update, 0x95AFB8), Ok((0x1800, 0x1400)));
+        }
+    }
+
+    #[test]
+    fn text_cleanup_rejects_changed_registers_instructions_and_offsets() {
+        let image = text_fixture(0);
+        let fixed = (sigs::TEXT_INIT_AT..sigs::TEXT_INIT_AT + sigs::TEXT_INIT.len())
+            .chain((0..36).filter(|i| !(3..7).contains(i) && !(32..36).contains(i))
+                .map(|i| sigs::TEXT_CLOSE_AT + i));
+        for at in fixed {
+            let mut changed = image.clone();
+            changed.write(at, &[image.read(at, 1).unwrap()[0] ^ 1]).unwrap();
+            assert!(text_close_rvas(&changed, 0, 0x95AFB8).is_err(), "accepted changed byte {at:#x}");
+        }
+        assert!(text_close_rvas(&image, 0, 0x95AEA8).is_err());
+    }
+
+    #[test]
+    fn text_cleanup_rejects_missing_code_and_targets_outside_image() {
+        assert!(text_close_rvas(&FileImage::from_code(&[0; 32]), 0, 0x95AFB8).is_err());
+        for at in [sigs::TEXT_CLOSE_AT + 3, sigs::TEXT_CLOSE_AT + 32] {
+            let mut changed = text_fixture(0);
+            changed.write(at, &i32::MAX.to_le_bytes()).unwrap();
+            assert!(text_close_rvas(&changed, 0, 0x95AFB8).is_err());
+            changed.write(at, &i32::MIN.to_le_bytes()).unwrap();
+            assert!(text_close_rvas(&changed, 0, 0x95AFB8).is_err());
+        }
+    }
+
+    /// Explicit, read-only integration check: NMS_TEXT_CHECK_EXE selects an owner-approved executable.
+    #[test]
+    #[ignore = "requires an explicitly supplied executable path"]
+    fn text_popup_matches_supplied_executable() {
+        let path = std::env::var_os("NMS_TEXT_CHECK_EXE").expect("set NMS_TEXT_CHECK_EXE");
+        let image = FileImage::load(std::path::Path::new(&path)).unwrap();
+        let layout = nms_core::game::resolve(&image).unwrap();
+        let unique = |pattern: &str| image.find_unique(&Pattern::parse(pattern).unwrap()).unique().unwrap();
+        let update = unique(sigs::TEXT_UPDATE);
+        for pattern in [sigs::TEXT_START, sigs::TEXT_RESULT, sigs::TEXT_STOP] {
+            unique(pattern);
+        }
+        let targets = text_close_rvas(&image, update, layout.members.input_controller).unwrap();
+        assert_eq!(targets.0, layout.data_slot);
+        let back = unique(sigs::OPTIONS_BACK);
+        assert_eq!(image.rel32_target(back + 0xD), Some(layout.data_slot));
+        // The Back routine uses the very same page-stack count and data as the menu.
+        assert_eq!(image.read(back + 0x2C, 2).unwrap(), [0x8B, 0x05]);
+        // CMP has an immediate byte after its displacement; RIP is one byte past rel32_target's base.
+        assert_eq!(image.rel32_target(back + 0x2E), image.rel32_target(unique(sigs::STACK_COUNT) + 2).map(|r| r + 1));
+        assert_eq!(image.read(back + 0x39, 3).unwrap(), [0x48, 0x8B, 0x05]);
+        assert_eq!(image.rel32_target(back + 0x3C), image.rel32_target(unique(sigs::STACK_DATA) + 3));
+        println!("Read-only validation: Update RVA {update:#x}, Back RVA {back:#x}, application slot {:#x}, input actions RVA {:#x}, controller offset {:#x}", targets.0, targets.1, layout.members.input_controller);
+    }
 
     #[test]
     fn fixed64_cuts_on_a_character_boundary_and_terminates() {

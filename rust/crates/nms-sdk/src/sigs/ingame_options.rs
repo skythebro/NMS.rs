@@ -46,21 +46,28 @@ pub const TABLE_OFFSET: usize = 0x14478;
 pub const TEXT_START: &str = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 81 EC 90 00 00 00 33 DB 44 88 89 F8 0A 00 00";
 pub const TEXT_RESULT: &str = "48 89 5C 24 10 48 89 74 24 18 57 48 81 EC 80 00 00 00 8B 81 70 06 00 00 33 DB";
 pub const TEXT_STOP: &str = "40 53 48 83 EC 30 33 DB 89 99 70 06 00 00 F3 0F 10 05 ? ? ? ? F3 0F 11 81 00 0B 00 00";
-pub const TEXT_UPDATE: &str = "48 8B C4 55 56 48 8D A8 38 FE FF FF 48 81 EC B8 02 00 00 83 B9 70 06 00 00 01";
+pub const TEXT_UPDATE: &str = "48 8B C4 55 57 48 8D A8 38 FE FF FF 48 81 EC B8 02 00 00 83 B9 70 06 00 00 01";
+/// Build 184271 saves the nonvolatile registers, sets R13D to zero and R15D to one.
+/// The close-code validation relies on those constants, so validate their initialization too.
+pub const TEXT_INIT_AT: usize = 0x23;
+pub const TEXT_INIT: &[u8] = &[
+    0x4C, 0x89, 0x60, 0x20, 0x45, 0x32, 0xE4, 0x4C, 0x89, 0x68, 0xE8,
+    0x45, 0x33, 0xED, 0x4C, 0x89, 0x78, 0xD8, 0x41, 0xBF, 0x01, 0x00, 0x00, 0x00,
+];
 /// Inside `TEXT_UPDATE`, at this byte and `TEXT_CLOSE_LEN` long: the code that gives the keyboard back
-/// (`mov rax,[rip+app]`, `mov rcx,[rax+<controller>]`, `mov [rcx+0x40],r12b`, `add rcx,0x1770`,
-/// `call set_actions`). Build 183791: controller `app+0x95AEB8`, action sets `ctl+0x1770` (`0x1500`
-/// before).
-pub const TEXT_CLOSE_AT: usize = 0x96D;
-pub const TEXT_CLOSE_LEN: usize = 38;
-/// The input controller's action-set group, the `add rcx, imm32` at byte 26 of the close code
+/// (`mov rax,[rip+app]`, `mov r8b,1`, `mov edx,r15d`, `mov rcx,[rax+<controller>]`,
+/// `mov [rcx+0x40],r13b`, `add rcx,0x1770`, `call set_actions`). Build 184271:
+/// controller `app+0x95AFB8`; R13D is zero and R15D is one on the cleanup path.
+pub const TEXT_CLOSE_AT: usize = 0xB4D;
+pub const TEXT_CLOSE_LEN: usize = 36;
+/// The input controller's action-set group, the `add rcx, imm32` at byte 24 of the close code
 /// (`0x1500` before build 183791). Both the close-code check and the action-set calls use it.
 pub const CONTROLLER_SETS: u32 = 0x1770;
 
 /// The Options "go back" step (`bool` in `cl`): pops one page off the page stack. The press that closes
 /// the text box with B also reached this and left the page, so it is refused while our box is open.
-/// `0x1406F4C30`; reads the app field `+0x89BD98` (`0x875498` before build 183791).
-pub const OPTIONS_BACK: &str = "48 89 5C 24 08 57 48 83 EC 20 48 8B 1D ? ? ? ? 0F B6 F9 8B 83 98 BD 89 00 85 C0 74 0E";
+/// Build 184271: `0x1406F6470`; reads the app field `+0x89BEA8` (`+0x89BD98` on 183877).
+pub const OPTIONS_BACK: &str = "48 89 5C 24 08 57 48 83 EC 20 48 8B 1D ? ? ? ? 0F B6 F9 8B 83 A8 BE 89 00 85 C0 74 0E";
 
 /// `cmp dword [rip+disp32], imm8`: the page stack count. Displacement at byte 2, instruction 7 long.
 pub const STACK_COUNT: &str = "83 3D ? ? ? ? ? 0F 84 ? ? ? ? 48 89 9C 24 ? ? ? ? 48 8D 4C 24";
