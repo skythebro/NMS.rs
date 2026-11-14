@@ -96,6 +96,7 @@
   "badge_files": "files",
   "badge_folder": "folder",
   "close_game": "Close the game first. The manager cannot change files while NMS.exe is running.",
+  "game_status_unknown": "Could not verify whether No Man's Sky is running. Try again.",
   "no_previous_launch": "No previous launch detected.",
   "could_not_read_log": "Could not read launcher.log.",
   "last_closed_attaching": "Last start: the game closed while the loader was attaching.",

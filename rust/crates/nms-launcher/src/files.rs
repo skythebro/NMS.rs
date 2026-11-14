@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use nms_core::paths;
-use nms_core::spawn::command;
 use serde_json::{json, Value};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
@@ -65,22 +64,6 @@ pub fn game_build_status(root: &Path) -> (&'static str, String) {
 
 pub fn game_build_line(root: &Path) -> String {
     game_build_status(root).1
-}
-
-#[allow(dead_code)]
-pub fn game_is_running() -> bool {
-    #[cfg(windows)]
-    {
-        let out = command("tasklist").args(["/FI", "IMAGENAME eq NMS.exe", "/NH"]).output();
-        match out {
-            Ok(out) => String::from_utf8_lossy(&out.stdout).contains("NMS.exe"),
-            Err(_) => false,
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        command("pgrep").args(["-x", "NMS.exe"]).output().map(|o| o.status.success()).unwrap_or(false)
-    }
 }
 
 pub fn user_lines(path: &Path) -> Vec<String> {
@@ -411,7 +394,6 @@ mod tests {
         std::fs::create_dir_all(paths::loader_dir(&root)).unwrap();
         std::fs::copy(&path, paths::loader_dir(&root).join("merge_order.txt")).unwrap();
         assert_eq!(merge_order_names(&root), vec!["Alpha".to_string(), "Beta".to_string()]);
-        let _ = game_is_running();
         let _ = std::fs::remove_dir_all(&root);
     }
 
