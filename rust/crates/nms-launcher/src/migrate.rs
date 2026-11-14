@@ -18,7 +18,7 @@ use std::process::ExitCode;
 
 use nms_core::paths;
 
-use crate::files;
+use crate::game_process::{self, GameStatus};
 use crate::i18n::I18n;
 use crate::manager_settings as mset;
 use crate::mods;
@@ -43,22 +43,18 @@ const USAGE: &str = "usage: nms-rs migrate [--yes]";
 
 /// Everything that touches the PC outside the game folder, so tests can stand in for it.
 pub struct Hooks<'a> {
-    pub game_is_running: &'a dyn Fn() -> bool,
+    pub game_status: &'a dyn Fn() -> GameStatus,
     pub launch_options: &'a dyn Fn() -> Vec<String>,
     pub strip_launch: &'a dyn Fn() -> Result<String, String>,
     /// Names of the running programs whose executable is inside the given NMS.py folder.
     pub py_processes: &'a dyn Fn(&Path) -> Vec<String>,
 }
 
-fn prod_strip() -> Result<String, String> {
-    mods::strip_launch(false)
-}
-
 pub fn production() -> Hooks<'static> {
     Hooks {
-        game_is_running: &files::game_is_running,
+        game_status: &game_process::status,
         launch_options: &steam::launch_option_strings,
-        strip_launch: &prod_strip,
+        strip_launch: &mods::strip_launch_options,
         py_processes: &py_processes,
     }
 }
@@ -670,15 +666,23 @@ fn short_list(items: &[String], limit: usize) -> String {
 pub fn migrate(root: &Path, hooks: &Hooks) -> Report {
     let mut report = Report::default();
     let legacy = detect(root, hooks);
+    let status = (hooks.game_status)();
+    match &status {
+        GameStatus::Closed => {}
+        GameStatus::Running => {
+            report.push(Mark::Fail, "close_game", "");
+            return report;
+        }
+        GameStatus::Unknown(error) => {
+            report.push(Mark::Fail, game_process::UNKNOWN_KEY, error.as_str());
+            return report;
+        }
+    }
     if !legacy.found() {
         // NMS.py went away on its own (deleted by hand): a marker from a partial run is stale.
         let _ = fs::remove_file(unfinished_marker(root));
         report.push(Mark::Done, "mig_nothing", "");
         report.ok = true;
-        return report;
-    }
-    if (hooks.game_is_running)() {
-        report.push(Mark::Fail, "close_game", "");
         return report;
     }
     // The old Mod Manager window (Python from NMS.py\runtime) holds files open: deleting NMS.py
@@ -726,7 +730,7 @@ pub fn migrate(root: &Path, hooks: &Hooks) -> Report {
         .into_iter()
         .filter_map(|p| fs::read(&p).ok().map(|b| (p, b)))
         .collect();
-    match mods::update_all(root, false) {
+    match mods::update_all(root, &status) {
         Ok(msg) => report.push(Mark::Done, "mig_updated", msg.replace('\n', " ")),
         Err(e) => {
             report.push(Mark::Fail, "mig_updated", e);
@@ -745,7 +749,7 @@ pub fn migrate(root: &Path, hooks: &Hooks) -> Report {
     let _ = mods::auto_install(root);
 
     // 4. Python leftovers in our mod folders (PulseTweaks and other people's mods stay).
-    match mods::cleanup_python(root, false) {
+    match mods::cleanup_python(root, &status) {
         Ok(text) => {
             let n = text.lines().filter(|l| l.starts_with("deleted ")).count();
             if n > 0 {
@@ -970,11 +974,11 @@ mod tests {
         root
     }
 
-    fn not_running() -> bool {
-        false
+    fn not_running() -> GameStatus {
+        GameStatus::Closed
     }
-    fn running() -> bool {
-        true
+    fn running() -> GameStatus {
+        GameStatus::Running
     }
     fn no_options() -> Vec<String> {
         Vec::new()
@@ -987,7 +991,7 @@ mod tests {
     }
 
     fn quiet() -> Hooks<'static> {
-        Hooks { game_is_running: &not_running, launch_options: &no_options, strip_launch: &must_not_strip, py_processes: &no_processes }
+        Hooks { game_status: &not_running, launch_options: &no_options, strip_launch: &must_not_strip, py_processes: &no_processes }
     }
 
     fn backup_of(report: &Report) -> PathBuf {
@@ -998,7 +1002,7 @@ mod tests {
     fn detects_the_old_layout() {
         let root = fixture("detect");
         let options = || vec![OLD_OPTION.to_string()];
-        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &must_not_strip, py_processes: &no_processes };
+        let hooks = Hooks { game_status: &not_running, launch_options: &options, strip_launch: &must_not_strip, py_processes: &no_processes };
         let legacy = detect(&root, &hooks);
         assert!(legacy.found());
         assert_eq!(legacy.nms_py.as_deref(), Some(root.join(NMS_PY).as_path()));
@@ -1030,7 +1034,7 @@ mod tests {
             option.borrow_mut().retain(|o| !o.contains("NMS.py"));
             Ok("Steam account 111: launch option removed.".to_string())
         };
-        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &strip, py_processes: &no_processes };
+        let hooks = Hooks { game_status: &not_running, launch_options: &options, strip_launch: &strip, py_processes: &no_processes };
         let report = migrate(&root, &hooks);
         let text = report.render(&I18n::new("en"));
         assert!(report.ok, "{text}");
@@ -1100,12 +1104,27 @@ mod tests {
     #[test]
     fn refuses_while_the_game_runs() {
         let root = fixture("running");
-        let hooks = Hooks { game_is_running: &running, launch_options: &no_options, strip_launch: &must_not_strip, py_processes: &no_processes };
+        let hooks = Hooks { game_status: &running, launch_options: &no_options, strip_launch: &must_not_strip, py_processes: &no_processes };
         let report = migrate(&root, &hooks);
         assert!(!report.ok && report.has("close_game"));
         assert!(root.join(NMS_PY).join("runtime").join("python.exe").is_file());
         assert!(root.join("GAMEDATA/MODS/BiggerItemGrids/bigger_item_grids.py").is_file());
         assert!(!root.join("NMS.rs").join("backup").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cannot_migrate_when_game_status_is_unknown() {
+        let root = fixture("unknown");
+        let hooks = Hooks {
+            game_status: &|| GameStatus::Unknown("snapshot failed".into()),
+            ..quiet()
+        };
+        let report = migrate(&root, &hooks);
+        assert!(!report.ok && report.has(game_process::UNKNOWN_KEY));
+        assert!(report.render(&I18n::new("en")).contains("snapshot failed"));
+        assert!(root.join(NMS_PY).join("runtime").join("python.exe").is_file());
+        assert!(!paths::loader_dir(&root).join("backup").exists());
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -1124,7 +1143,7 @@ mod tests {
         let root = fixture("steamfail");
         let options = || vec![OLD_OPTION.to_string()];
         let fail = || -> Result<String, String> { Err("Steam did not close".to_string()) };
-        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &fail, py_processes: &no_processes };
+        let hooks = Hooks { game_status: &not_running, launch_options: &options, strip_launch: &fail, py_processes: &no_processes };
         let report = migrate(&root, &hooks);
         assert!(!report.ok);
         assert!(report.has("mig_steam_failed") && report.has("mig_py_kept_steam"));
@@ -1266,7 +1285,7 @@ mod tests {
             option.borrow_mut().clear();
             Ok("removed".to_string())
         };
-        let hooks = Hooks { game_is_running: &not_running, launch_options: &options, strip_launch: &strip, py_processes: &no_processes };
+        let hooks = Hooks { game_status: &not_running, launch_options: &options, strip_launch: &strip, py_processes: &no_processes };
         let py = root.join(NMS_PY);
         let held = py.join("lib").join("held.pyd");
         write(&held, "dll");
@@ -1309,7 +1328,7 @@ mod tests {
     fn refuses_while_an_nms_py_program_runs() {
         let root = fixture("pyopen");
         let open = |dir: &Path| exes_inside(dir, &[dir.join("runtime").join("python.exe")]);
-        let hooks = Hooks { game_is_running: &not_running, launch_options: &no_options, strip_launch: &must_not_strip, py_processes: &open };
+        let hooks = Hooks { game_status: &not_running, launch_options: &no_options, strip_launch: &must_not_strip, py_processes: &open };
         let legacy = detect(&root, &hooks);
         assert_eq!(legacy.py_open, vec!["python.exe".to_string()]);
         assert!(py_open_text(&legacy, &I18n::new("en")).contains("python.exe"));

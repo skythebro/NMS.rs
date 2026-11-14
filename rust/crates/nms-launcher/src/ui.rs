@@ -13,6 +13,7 @@ use serde_json::Value;
 use crate::cards::{self, Filter, FILTERS};
 use crate::files;
 use crate::fonts;
+use crate::game_process::{self, GameStatus};
 use crate::i18n::{self, I18n};
 use crate::manager_settings::{self as mset, ManagerSettings, SCALE_DEFAULT, SCALE_MAX, SCALE_MIN, ZOOM_BASE};
 use crate::migrate::{self, Legacy};
@@ -252,8 +253,8 @@ struct Manager {
     /// Slider value while dragging; becomes `scale` on release.
     pending_scale: f32,
     tab: Tab,
-    /// `tasklist` is slow, so the game-running check is cached for a couple of seconds.
-    running: bool,
+    /// The buttons use a cached status. Jobs make a fresh check before changing files.
+    game_status: GameStatus,
     running_checked: Option<std::time::Instant>,
     /// File work runs on its own thread so the window keeps drawing.
     job: Option<Job>,
@@ -353,7 +354,13 @@ const RUNNING_CHECK_EVERY: std::time::Duration = std::time::Duration::from_secs(
 
 impl Manager {
     fn new(root: PathBuf) -> Self {
-        if !files::game_is_running() {
+        let mut manager = Self::with_status(root, game_process::status());
+        manager.start_detect();
+        manager
+    }
+
+    fn with_status(root: PathBuf, game_status: GameStatus) -> Self {
+        if game_status.is_closed() {
             let _ = mods::auto_install(&root);
         }
         let rows = rows_from_disk(&root);
@@ -363,12 +370,12 @@ impl Manager {
         let prefs = mset::load(&root);
         let i18n = I18n::new(&prefs.language);
         let scale = prefs.text_size;
-        let mut manager = Self {
+        Self {
             root,
             scale,
             zoom_set: false,
             pending_scale: scale,
-            running: false,
+            game_status,
             running_checked: None,
             job: None,
             wine: is_wine(),
@@ -397,9 +404,7 @@ impl Manager {
             theme_set: false,
             grid_cols: None,
             layout: Vec::new(),
-        };
-        manager.start_detect();
-        manager
+        }
     }
 
     /// Look for an old NMS.py setup in the background; `poll_detect` picks the answer up.
@@ -724,9 +729,9 @@ impl Manager {
             let label = self.i18n.t("rs_cleanup_title");
             let words = CleanupWords::new(&self.i18n);
             self.start_job(Area::Settings, label, move |root| {
-                let running = files::game_is_running();
-                let python = mods::cleanup_python(root, running)?;
-                let steam = mods::strip_launch(running)?;
+                let status = game_process::status();
+                let python = mods::cleanup_python(root, &status)?;
+                let steam = mods::strip_launch(&status)?;
                 let detail = [python.as_str(), steam.as_str()].iter().filter(|s| !s.is_empty()).copied().collect::<Vec<_>>().join("\n");
                 log_error(root, &format!("clean-up:\n{detail}"));
                 Ok(format!("{}{DETAIL_SEP}{detail}", cleanup_summary(&python, &steam, &words)))
@@ -821,7 +826,9 @@ impl Manager {
             Some((Level::Info, format!("{}: {} ({}s)", self.i18n.t("rs_working"), job.label, job.started.elapsed().as_secs()), true))
         } else if result && self.failed {
             Some((Level::Error, text, false))
-        } else if self.running {
+        } else if let GameStatus::Unknown(error) = &self.game_status {
+            Some((Level::Warn, format!("{} ({error})", self.i18n.t(game_process::UNKNOWN_KEY)), false))
+        } else if self.game_status == GameStatus::Running {
             Some((Level::Warn, self.i18n.t("close_game"), false))
         } else if result {
             Some((self.level(), text, false))
@@ -1265,15 +1272,15 @@ impl Manager {
         match action {
             CardAction::Install => {
                 let label = format!("{} {}", self.i18n.t("install"), name);
-                self.start_job(Area::Mods, label, move |root| mods::install_mod(root, &name, files::game_is_running()));
+                self.start_job(Area::Mods, label, move |root| mods::install_mod(root, &name, &game_process::status()));
             }
             CardAction::Park => {
                 let label = format!("{} {}", self.i18n.t("remove"), name);
-                self.start_job(Area::Mods, label, move |root| mods::park_mod(root, &name, files::game_is_running()));
+                self.start_job(Area::Mods, label, move |root| mods::park_mod(root, &name, &game_process::status()));
             }
             CardAction::Update => {
                 let label = format!("{} {}", self.i18n.t("update"), name);
-                self.start_job(Area::Mods, label, move |root| mods::update_mod(root, &name, files::game_is_running()));
+                self.start_job(Area::Mods, label, move |root| mods::update_mod(root, &name, &game_process::status()));
             }
         }
     }
@@ -1518,9 +1525,9 @@ impl Manager {
             self.layout.push((format!("button:{i}"), rect));
             if st::place(ui, ("bulk", i), rect, !running, styled_button(label.clone(), look)).clicked() {
                 match bulk {
-                    Bulk::Install => self.start_job(Area::Mods, label, |root| mods::install_all(root, files::game_is_running())),
-                    Bulk::Remove => self.start_job(Area::Mods, label, |root| mods::park_all(root, files::game_is_running())),
-                    Bulk::Update => self.start_job(Area::Mods, label, |root| mods::update_all(root, files::game_is_running())),
+                    Bulk::Install => self.start_job(Area::Mods, label, |root| mods::install_all(root, &game_process::status())),
+                    Bulk::Remove => self.start_job(Area::Mods, label, |root| mods::park_all(root, &game_process::status())),
+                    Bulk::Update => self.start_job(Area::Mods, label, |root| mods::update_all(root, &game_process::status())),
                 }
             }
         }
@@ -1626,7 +1633,7 @@ impl Manager {
                     self.sizes = self.sizes.clamp();
                     let spec = self.sizes.to_spec();
                     let label = self.i18n.t("rs_apply");
-                    self.start_job(Area::Sizes, label, move |root| apply::apply(root, spec, files::game_is_running()));
+                    self.start_job(Area::Sizes, label, move |root| apply::apply(root, spec, &game_process::status()));
                 }
             });
         ui.add(egui::Label::new(dim(self.i18n.t("sizes_summary"))).wrap());
@@ -1656,7 +1663,7 @@ impl Manager {
         self.sync_fonts(ctx);
         let stale = self.running_checked.is_none_or(|t| t.elapsed() >= RUNNING_CHECK_EVERY);
         if stale {
-            self.running = files::game_is_running();
+            self.game_status = game_process::status();
             self.running_checked = Some(std::time::Instant::now());
             self.recheck_py_open();
         }
@@ -1667,7 +1674,7 @@ impl Manager {
             ctx.request_repaint_after(std::time::Duration::from_millis(80));
         }
         let working = self.job.is_some();
-        let running = self.running || working;
+        let running = !self.game_status.is_closed() || working;
         if !self.theme_set {
             cards::apply_theme(ctx);
             self.theme_set = true;
@@ -1946,6 +1953,22 @@ mod tests {
     }
 
     #[test]
+    fn startup_installs_menu_only_when_game_is_confirmed_closed() {
+        let root = temp_root("startup-game-status");
+        let menu = mods::stock_dir(&root).join("NMSrsMenu").join("NMSrsMenu.lua");
+        write(&menu, "-- stock menu\n");
+        let live = mods::mods_dir(&root).join("NMSrsMenu").join("NMSrsMenu.lua");
+
+        Manager::with_status(root.clone(), GameStatus::Running);
+        assert!(!live.exists());
+        Manager::with_status(root.clone(), GameStatus::Unknown("snapshot failed".into()));
+        assert!(!live.exists());
+        Manager::with_status(root.clone(), GameStatus::Closed);
+        assert_eq!(fs::read_to_string(live).unwrap(), "-- stock menu\n");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn clamps_size_fields() {
         assert_eq!(
             clamp_size_fields("99", "20", "2.05", "110"),
@@ -2070,11 +2093,11 @@ mod tests {
         write(&mods::mods_dir(&root).join("CraftFromStorage").join("a.lua"), "mine\n");
         let rows = rows_from_disk(&root);
         assert_eq!(outdated_count(&rows), 2, "{rows:?}");
-        mods::update_all(&root, false).unwrap();
+        mods::update_all(&root, &GameStatus::Closed).unwrap();
         assert_eq!(outdated_count(&rows_from_disk(&root)), 0);
         let edited = fs::read_to_string(mods::mods_dir(&root).join("CraftFromStorage").join("a.lua")).unwrap();
         assert_eq!(edited, "mine\n");
-        assert_eq!(mods::update_all(&root, true).unwrap_err(), mods::BUSY);
+        assert_eq!(mods::update_all(&root, &GameStatus::Running).unwrap_err(), game_process::BUSY);
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -2284,7 +2307,7 @@ mod tests {
         let mut manager = Manager::new(root.clone());
         manager.legacy_rx = None;
         manager.legacy = Some(Legacy::default());
-        manager.running = false;
+        manager.game_status = GameStatus::Closed;
         manager.running_checked = Some(Instant::now() + std::time::Duration::from_secs(3600));
         manager.rows = mods::OUR_MODS
             .iter()
@@ -2553,7 +2576,7 @@ mod tests {
             manager.filter = Filter::All;
             manager.search.clear();
             manager.tab = Tab::Mods;
-            manager.running = false;
+            manager.game_status = GameStatus::Closed;
             manager.job = None;
         };
         for code in ["en", "ko", "de"] {
@@ -2594,7 +2617,7 @@ mod tests {
                     manager.message = text.to_string();
                     manager.message_area = area;
                     manager.failed = failed;
-                    manager.running = name == "running";
+                    manager.game_status = if name == "running" { GameStatus::Running } else { GameStatus::Closed };
                     if name == "working" {
                         let (tx, rx2) = mpsc::channel();
                         std::mem::forget(tx);

@@ -8,10 +8,9 @@ use std::path::{Path, PathBuf};
 use super::grid::{self, RowsSpec, AREA_W, CARD_W, GAP, MAX_ITEMS, MIN_CARD};
 use super::inventory;
 use super::layout;
-use crate::files;
+use crate::game_process::{self, GameStatus};
 use crate::tools::{self, Tools};
 
-pub const BUSY: &str = "Close the game first. The manager cannot change files while NMS.exe is running.";
 const WINDOW_RANGE: (f64, f64) = (1.0, 1.4);
 const SLOT_RANGE: (i64, i64) = (50, 100);
 const DEFAULT_COLUMNS: i64 = 8;
@@ -183,10 +182,8 @@ fn rows_spec(text: &str) -> RowsSpec {
     }
 }
 
-pub fn apply(root: &Path, spec: ApplySpec, running: bool) -> Result<String, String> {
-    if running {
-        return Err(BUSY.into());
-    }
+pub fn apply(root: &Path, spec: ApplySpec, status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
     let window = clamp_window(spec.window);
     let columns = clamp_columns(spec.columns, window);
     let rows_text = clamp_rows_text(&spec.rows, columns);
@@ -311,7 +308,7 @@ fn parse_apply_args(args: &[&str]) -> Result<ApplySpec, String> {
 
 pub fn cli(root: &Path, args: &[&str]) -> Result<String, String> {
     let spec = parse_apply_args(args)?;
-    apply(root, spec, files::game_is_running())
+    apply(root, spec, &game_process::status())
 }
 
 #[cfg(test)]
@@ -334,16 +331,18 @@ mod tests {
     }
 
     #[test]
-    fn apply_refuses_when_game_running() {
-        let spec = ApplySpec {
+    fn apply_requires_confirmed_closed() {
+        let spec = || ApplySpec {
             columns: 8,
             rows: "auto".into(),
             window: 1.4,
             slots: 70.0,
             filters: true,
         };
-        let err = apply(Path::new("."), spec, true).unwrap_err();
-        assert_eq!(err, BUSY);
+        let err = apply(Path::new("."), spec(), &GameStatus::Running).unwrap_err();
+        assert_eq!(err, game_process::BUSY);
+        let error = apply(Path::new("."), spec(), &GameStatus::Unknown("snapshot failed".into())).unwrap_err();
+        assert!(error.contains("snapshot failed"), "{error}");
     }
 
     #[test]

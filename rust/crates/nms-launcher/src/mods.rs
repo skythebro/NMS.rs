@@ -7,11 +7,10 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::files;
+use crate::game_process::{self, GameStatus};
 use crate::steam;
 
 pub const COMBINED_NAME: &str = "z_Combined Mods";
-pub const BUSY: &str = "Close the game first. The manager cannot change files while NMS.exe is running.";
 
 /// Python `OUR_MODS` (card order). Cleanup never deletes PulseTweaks Python.
 pub const OUR_MODS: &[&str] = &[
@@ -62,14 +61,6 @@ fn log_line(root: &Path, message: &str) {
     let _ = fs::create_dir_all(&dir);
     if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(dir.join("manager.log")) {
         let _ = writeln!(f, "{message}");
-    }
-}
-
-fn busy(running: bool) -> Result<(), String> {
-    if running {
-        Err(BUSY.into())
-    } else {
-        Ok(())
     }
 }
 
@@ -348,8 +339,8 @@ pub fn ensure_stock_files(root: &Path, name: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn park_mod(root: &Path, name: &str, running: bool) -> Result<String, String> {
-    busy(running)?;
+pub fn park_mod(root: &Path, name: &str, status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
     if name == COMBINED_NAME {
         return Err(format!("{COMBINED_NAME} cannot be parked."));
     }
@@ -368,8 +359,12 @@ pub fn park_mod(root: &Path, name: &str, running: bool) -> Result<String, String
     Ok(msg)
 }
 
-pub fn unpark_mod(root: &Path, name: &str, running: bool) -> Result<String, String> {
-    busy(running)?;
+pub fn unpark_mod(root: &Path, name: &str, status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
+    unpark_files(root, name)
+}
+
+fn unpark_files(root: &Path, name: &str) -> Result<String, String> {
     let src = parked_dir(root).join(name);
     let dest = mods_dir(root).join(name);
     if !src.is_dir() {
@@ -385,8 +380,8 @@ pub fn unpark_mod(root: &Path, name: &str, running: bool) -> Result<String, Stri
     Ok(msg)
 }
 
-pub fn park_all(root: &Path, running: bool) -> Result<String, String> {
-    busy(running)?;
+pub fn park_all(root: &Path, status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
     let stock = stock_names(root);
     let live = mods_dir(root);
     let mut done = Vec::new();
@@ -397,7 +392,7 @@ pub fn park_all(root: &Path, running: bool) -> Result<String, String> {
         if !(stock.iter().any(|s| s == &name) || OUR_MODS.contains(&name.as_str())) {
             continue;
         }
-        park_mod(root, &name, false)?;
+        park_mod(root, &name, status)?;
         done.push(name);
     }
     if done.is_empty() {
@@ -407,15 +402,19 @@ pub fn park_all(root: &Path, running: bool) -> Result<String, String> {
     }
 }
 
-pub fn install_mod(root: &Path, name: &str, running: bool) -> Result<String, String> {
-    busy(running)?;
+pub fn install_mod(root: &Path, name: &str, status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
+    install_files(root, name)
+}
+
+fn install_files(root: &Path, name: &str) -> Result<String, String> {
     let live = mods_dir(root).join(name);
     let parked = parked_dir(root).join(name);
     if live.is_dir() {
         return Ok(format!("{name} is already in GAMEDATA\\MODS."));
     }
     if parked.is_dir() {
-        return unpark_mod(root, name, false);
+        return unpark_files(root, name);
     }
     let src = stock_dir(root).join(name);
     if src.is_dir() {
@@ -430,7 +429,7 @@ pub fn install_mod(root: &Path, name: &str, running: bool) -> Result<String, Str
     Ok(msg)
 }
 
-/// Install or update the `AUTO_MODS` from stock. Safe while the game runs (plain file copies).
+/// Install/update the automatic mods from stock, also called during loader startup preparation.
 pub fn auto_install(root: &Path) -> Vec<String> {
     let mut done = Vec::new();
     for name in AUTO_MODS {
@@ -440,12 +439,12 @@ pub fn auto_install(root: &Path) -> Vec<String> {
         let live = mods_dir(root).join(name);
         if live.is_dir() {
             if is_outdated(root, name, &live) {
-                if let Ok(m) = update_mod(root, name, false) {
+                if let Ok(m) = update_files(root, name) {
                     done.push(m);
                 }
             }
         } else if !parked_dir(root).join(name).is_dir() {
-            if let Ok(m) = install_mod(root, name, false) {
+            if let Ok(m) = install_files(root, name) {
                 done.push(m);
             }
         }
@@ -492,8 +491,12 @@ fn with_side_bar_note(root: &Path, msg: String) -> String {
     }
 }
 
-pub fn update_mod(root: &Path, name: &str, running: bool) -> Result<String, String> {
-    busy(running)?;
+pub fn update_mod(root: &Path, name: &str, status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
+    update_files(root, name)
+}
+
+fn update_files(root: &Path, name: &str) -> Result<String, String> {
     let src = stock_dir(root).join(name);
     if !src.is_dir() {
         return Err(format!("No replacement files for {name}."));
@@ -519,15 +522,15 @@ pub fn update_mod(root: &Path, name: &str, running: bool) -> Result<String, Stri
     Ok(msg)
 }
 
-pub fn install_all(root: &Path, running: bool) -> Result<String, String> {
-    busy(running)?;
+pub fn install_all(root: &Path, status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
     let mut done = Vec::new();
     for name in stock_names(root) {
         let live = mods_dir(root).join(&name);
         if live.is_dir() {
             continue;
         }
-        install_mod(root, &name, false)?;
+        install_mod(root, &name, status)?;
         done.push(name);
     }
     if done.is_empty() {
@@ -537,8 +540,8 @@ pub fn install_all(root: &Path, running: bool) -> Result<String, String> {
     }
 }
 
-pub fn update_all(root: &Path, running: bool) -> Result<String, String> {
-    busy(running)?;
+pub fn update_all(root: &Path, status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
     let mut done = Vec::new();
     for name in stock_names(root) {
         let live = mods_dir(root).join(&name);
@@ -551,7 +554,7 @@ pub fn update_all(root: &Path, running: bool) -> Result<String, String> {
             continue;
         };
         if is_outdated(root, &name, &folder) {
-            update_mod(root, &name, false)?;
+            update_mod(root, &name, status)?;
             done.push(name);
         }
     }
@@ -632,8 +635,8 @@ pub(crate) fn python_leftovers(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-pub fn cleanup_python(root: &Path, running: bool) -> Result<String, String> {
-    busy(running)?;
+pub fn cleanup_python(root: &Path, status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
     let mut lines = Vec::new();
     for path in python_leftovers(root) {
         fs::remove_file(&path).map_err(|e| format!("delete {}: {e}", path.display()))?;
@@ -652,8 +655,12 @@ pub fn cleanup_python(root: &Path, running: bool) -> Result<String, String> {
     }
 }
 
-pub fn strip_launch(running: bool) -> Result<String, String> {
-    busy(running)?;
+pub fn strip_launch(status: &GameStatus) -> Result<String, String> {
+    status.require_closed()?;
+    strip_launch_options()
+}
+
+pub(crate) fn strip_launch_options() -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     Ok(steam::apply_for(&exe, false, false)?.join("\n"))
 }
@@ -685,17 +692,20 @@ pub fn status(root: &Path) -> String {
 }
 
 pub fn cli(root: &Path, args: &[&str]) -> Result<String, String> {
-    let running = files::game_is_running();
+    cli_with_status(root, args, game_process::status)
+}
+
+fn cli_with_status(root: &Path, args: &[&str], check: impl FnOnce() -> GameStatus) -> Result<String, String> {
     match args {
-        ["park", name] => park_mod(root, name, running),
-        ["unpark", name] => unpark_mod(root, name, running),
-        ["park-all"] => park_all(root, running),
-        ["install", name] => install_mod(root, name, running),
-        ["update", name] => update_mod(root, name, running),
-        ["install-all"] => install_all(root, running),
-        ["update-all"] => update_all(root, running),
-        ["cleanup-python"] => cleanup_python(root, running),
-        ["strip-launch"] => strip_launch(running),
+        ["park", name] => park_mod(root, name, &check()),
+        ["unpark", name] => unpark_mod(root, name, &check()),
+        ["park-all"] => park_all(root, &check()),
+        ["install", name] => install_mod(root, name, &check()),
+        ["update", name] => update_mod(root, name, &check()),
+        ["install-all"] => install_all(root, &check()),
+        ["update-all"] => update_all(root, &check()),
+        ["cleanup-python"] => cleanup_python(root, &check()),
+        ["strip-launch"] => strip_launch(&check()),
         ["status"] => Ok(status(root)),
         _ => Err(
             "usage: nms-rs mods park <name> | unpark <name> | park-all | install <name> | update <name> | install-all | update-all | cleanup-python | strip-launch | status"
@@ -712,6 +722,31 @@ mod tests {
     static TEMP_N: AtomicU32 = AtomicU32::new(0);
 
     #[test]
+    fn mod_commands_block_unknown_status_but_status_is_still_available() {
+        let root = temp_root("unknown-state");
+        let name = "CraftFromStorage";
+        let live = mods_dir(&root).join(name);
+        let stock = stock_dir(&root).join(name);
+        fs::create_dir_all(&live).unwrap();
+        fs::create_dir_all(&stock).unwrap();
+        fs::write(live.join("old.py"), b"legacy").unwrap();
+        fs::write(stock.join("mod.lua"), b"stock").unwrap();
+        let commands: &[&[&str]] = &[
+            &["park", name], &["unpark", name], &["park-all"], &["install", name],
+            &["update", name], &["install-all"], &["update-all"], &["cleanup-python"], &["strip-launch"],
+        ];
+        for args in commands {
+            let error = cli_with_status(&root, args, || GameStatus::Unknown("snapshot failed".into())).unwrap_err();
+            assert!(error.contains("snapshot failed"), "{args:?}: {error}");
+        }
+        assert_eq!(fs::read(live.join("old.py")).unwrap(), b"legacy");
+        assert!(!live.join("mod.lua").exists());
+        assert!(!parked_dir(&root).exists());
+        assert!(cli_with_status(&root, &["status"], || panic!("read-only status needs no process query")).is_ok());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn size_preset_installs_and_survives_updates() {
         let sis = "SmallerInventorySlots";
         let preset = "smaller_inventory_slots_preset.json";
@@ -723,20 +758,20 @@ mod tests {
         fs::write(src.join("SmallerInventorySlots.lua"), b"-- lua").unwrap();
 
         // Install copies the preset (it did not before 4.0.3), never a settings file.
-        install_mod(&root, sis, false).unwrap();
+        install_mod(&root, sis, &GameStatus::Closed).unwrap();
         let live = mods_dir(&root).join(sis);
         assert!(live.join(preset).is_file());
         assert!(!live.join("smaller_inventory_slots.json").exists());
 
         // Update keeps the preset Apply sizes wrote.
         fs::write(live.join(preset), b"{\"scale\": 0.5}").unwrap();
-        update_mod(&root, sis, false).unwrap();
+        update_mod(&root, sis, &GameStatus::Closed).unwrap();
         assert_eq!(fs::read(live.join(preset)).unwrap(), b"{\"scale\": 0.5}");
 
         // An older install without it is outdated, and update adds it.
         fs::remove_file(live.join(preset)).unwrap();
         assert!(is_outdated(&root, sis, &live));
-        update_mod(&root, sis, false).unwrap();
+        update_mod(&root, sis, &GameStatus::Closed).unwrap();
         assert_eq!(fs::read(live.join(preset)).unwrap(), b"{\"scale\": 0.7}");
         let _ = fs::remove_dir_all(&root);
     }
@@ -766,7 +801,7 @@ mod tests {
         fs::create_dir_all(&live).unwrap();
         fs::write(live.join("SmallerInventorySlots.lua"), b"-- lua").unwrap();
         assert!(is_outdated(&root, sis, &live));
-        update_mod(&root, sis, false).unwrap();
+        update_mod(&root, sis, &GameStatus::Closed).unwrap();
         assert_eq!(fs::read(live.join(&glyph)).unwrap(), b"DDS new");
         assert!(!is_outdated(&root, sis, &live));
         let _ = fs::remove_dir_all(&root);
@@ -824,7 +859,7 @@ mod tests {
         let live = mods_dir(&root).join("NMSrsMenu");
         assert!(live.join("NMSrsMenu.lua").is_file());
         assert!(auto_install(&root).is_empty());
-        park_mod(&root, "NMSrsMenu", false).unwrap();
+        park_mod(&root, "NMSrsMenu", &GameStatus::Closed).unwrap();
         assert!(auto_install(&root).is_empty());
         assert!(!live.exists());
     }
@@ -835,11 +870,11 @@ mod tests {
         let live = mods_dir(&root).join("CraftFromStorage");
         write(&live.join("craft_from_storage.py"), "x = 1\n");
         write(&live.join("craft_from_storage.json"), "{\"anywhere\": true}\n");
-        park_mod(&root, "CraftFromStorage", false).unwrap();
+        park_mod(&root, "CraftFromStorage", &GameStatus::Closed).unwrap();
         assert!(!live.exists());
         let parked = parked_dir(&root).join("CraftFromStorage").join("craft_from_storage.json");
         assert_eq!(fs::read_to_string(&parked).unwrap(), "{\"anywhere\": true}\n");
-        unpark_mod(&root, "CraftFromStorage", false).unwrap();
+        unpark_mod(&root, "CraftFromStorage", &GameStatus::Closed).unwrap();
         let json = live.join("craft_from_storage.json");
         assert_eq!(fs::read_to_string(&json).unwrap(), "{\"anywhere\": true}\n");
         let _ = fs::remove_dir_all(&root);
@@ -850,8 +885,8 @@ mod tests {
         let root = temp_root("busy");
         let live = mods_dir(&root).join("CraftFromStorage");
         write(&live.join("a.py"), "x\n");
-        let err = park_mod(&root, "CraftFromStorage", true).unwrap_err();
-        assert_eq!(err, BUSY);
+        let err = park_mod(&root, "CraftFromStorage", &GameStatus::Running).unwrap_err();
+        assert_eq!(err, game_process::BUSY);
         assert!(live.is_dir());
         let _ = fs::remove_dir_all(&root);
     }
@@ -867,7 +902,7 @@ mod tests {
         write(&live.join("bigger_item_grids.json"), "{\"write_log\": true}\n");
         write(&live.join("UI").join("POPUP.MBIN"), "old-ui\n");
         assert!(is_outdated(&root, "BiggerItemGrids", &live));
-        update_mod(&root, "BiggerItemGrids", false).unwrap();
+        update_mod(&root, "BiggerItemGrids", &GameStatus::Closed).unwrap();
         assert_eq!(fs::read_to_string(live.join("README.txt")).unwrap(), "new readme\n");
         assert!(!live.join("bigger_item_grids.py").exists());
         assert!(!is_outdated(&root, "BiggerItemGrids", &live));
@@ -921,10 +956,10 @@ mod tests {
         let root = temp_root("manifest");
         write(&stock_dir(&root).join("stock.json"), "{\"QuickRecharge\": \"3.0.4\"}\n");
         assert_eq!(stock_names(&root), vec!["QuickRecharge".to_string()]);
-        install_all(&root, false).unwrap();
+        install_all(&root, &GameStatus::Closed).unwrap();
         assert!(mods_dir(&root).join("QuickRecharge").is_dir());
         assert!(!is_outdated(&root, "QuickRecharge", &mods_dir(&root).join("QuickRecharge")));
-        assert!(install_mod(&root, "NotListed", false).is_err());
+        assert!(install_mod(&root, "NotListed", &GameStatus::Closed).is_err());
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -940,7 +975,7 @@ mod tests {
         write(&qta.join("notes.log"), "log\n");
         let pulse = mods_dir(&root).join("PulseTweaks");
         write(&pulse.join("pulse_tweaks.py"), "keep\n");
-        let out = cleanup_python(&root, false).unwrap();
+        let out = cleanup_python(&root, &GameStatus::Closed).unwrap();
         assert!(out.contains("quick_transfer_all.py"), "{out}");
         assert!(!qta.join("quick_transfer_all.py").exists());
         assert!(!qta.join("quick_transfer_all.py.off").exists());
@@ -968,7 +1003,7 @@ mod tests {
         assert!(text.contains("QuickTransferAll live"), "{text}");
         assert!(text.contains("PulseTweaks missing"), "{text}");
         assert!(text.contains("python leftover: yes"), "{text}");
-        cleanup_python(&root, false).unwrap();
+        cleanup_python(&root, &GameStatus::Closed).unwrap();
         let text = status(&root);
         assert!(text.contains("python leftover: no"), "{text}");
         let _ = fs::remove_dir_all(&root);
@@ -981,7 +1016,7 @@ mod tests {
             &parked_dir(&root).join("CraftFromStorage").join("craft_from_storage.json"),
             "{\"anywhere\": true}\n",
         );
-        install_mod(&root, "CraftFromStorage", false).unwrap();
+        install_mod(&root, "CraftFromStorage", &GameStatus::Closed).unwrap();
         assert!(mods_dir(&root).join("CraftFromStorage").join("craft_from_storage.json").is_file());
         assert!(!parked_dir(&root).join("CraftFromStorage").exists());
         write(
@@ -992,7 +1027,7 @@ mod tests {
             &stock_dir(&root).join("HideEmptyHover").join("hide_empty_hover.py"),
             "python history\n",
         );
-        install_mod(&root, "HideEmptyHover", false).unwrap();
+        install_mod(&root, "HideEmptyHover", &GameStatus::Closed).unwrap();
         assert_eq!(
             fs::read_to_string(mods_dir(&root).join("HideEmptyHover").join("README.txt")).unwrap(),
             "stock\n"
@@ -1007,7 +1042,7 @@ mod tests {
         write(&mods_dir(&root).join(COMBINED_NAME).join("combined.txt"), "x\n");
         write(&mods_dir(&root).join("QuickRecharge").join("quick_recharge.py"), "x\n");
         write(&mods_dir(&root).join("OtherPersonsMod").join("notes.txt"), "leave\n");
-        park_all(&root, false).unwrap();
+        park_all(&root, &GameStatus::Closed).unwrap();
         assert!(mods_dir(&root).join(COMBINED_NAME).is_dir());
         assert!(mods_dir(&root).join("OtherPersonsMod").is_dir());
         assert!(parked_dir(&root).join("QuickRecharge").is_dir());
