@@ -330,11 +330,8 @@ pub fn install(image: &ProcessImage, registry: Arc<Registry>, log: Arc<Log>) {
     if let Err(e) = options_page_title::subscribe(image, sigs::PAGE_TITLE, None, Some(on_title)) {
         log.info(&format!("in-game Mods menu: page title not set: {e}"));
     }
-    match locate_pause(image) {
-        Ok(()) => match options_game_switcher::subscribe(image, sigs::GAME_SWITCHER, None, Some(on_switcher)) {
-            Ok(()) => log.info("in-game Mods menu: pause list hook ready (needs NMSrsMenu.lua for the button)"),
-            Err(e) => log.info(&format!("in-game Mods menu: no pause row: {e}")),
-        },
+    match install_pause(image) {
+        Ok(()) => log.info("in-game Mods menu: pause list hook ready (needs NMSrsMenu.lua for the button)"),
         Err(e) => log.info(&format!("in-game Mods menu: no pause row: {e}")),
     }
     match (finalize, end) {
@@ -476,22 +473,44 @@ unsafe extern "system" fn back_detour(flag: u64) -> u64 {
 
 /// The pause list needs three more game routines and the busy flag. All optional: without them the
 /// main-menu page still works.
-fn locate_pause(image: &ProcessImage) -> Result<(), String> {
-    let at = |a: &AtomicUsize, name: &str, pattern: &str| -> Result<(), String> {
-        a.store(image.va(find(image, name, pattern)?), Ordering::Release);
-        Ok(())
-    };
-    at(&FIND_CHILD, "child find", sigs::FIND_CHILD)?;
-    at(&CONFIRM, "Confirm", sigs::CONFIRM)?;
-    let function = find(image, "pause list", sigs::GAME_SWITCHER)?;
-    let mov = image.read(function + sigs::BUSY_AT, 3).ok_or("pause list unreadable")?;
-    let cmp = image.read(function + sigs::BUSY_CHECK_AT, 7).ok_or("pause list unreadable")?;
-    if mov[..] != sigs::BUSY_CODE || cmp[..] != sigs::BUSY_CHECK {
-        return Err("pause list changed (game update?)".into());
+fn install_pause(image: &ProcessImage) -> Result<(), String> {
+    let data_slot = nms_core::game::live::get().ok_or("pause list needs the game context")?.layout().data_slot;
+    let entry = pause_switcher(image, data_slot)?;
+    let child = find(image, "child find", sigs::FIND_CHILD)?;
+    let confirm = find(image, "Confirm", sigs::CONFIRM)?;
+    FIND_CHILD.store(image.va(child), Ordering::Release);
+    CONFIRM.store(image.va(confirm), Ordering::Release);
+    SWITCHER_BUSY.store(image.va(data_slot), Ordering::Release);
+    // SAFETY: pause_switcher checks the unique dispatch call's destination and its layout.
+    // DoGameSwitcher takes the page in rcx on both supported layouts.
+    unsafe { options_game_switcher::subscribe_at(image.va(entry), None, Some(on_switcher)) }
+}
+
+fn pause_switcher(image: &dyn Code, data_slot: usize) -> Result<usize, String> {
+    let entry = sigs::GAME_SWITCHER
+        .locate(image).map_err(|e| e.to_string())?.unique()
+        .ok_or("pause list dispatch not found (game update?)")?;
+    let busy = sigs::GAME_SWITCHER_BUSY
+        .locate(image).map_err(|e| e.to_string())?.unique()
+        .ok_or("pause list popup check not found (game update?)")?;
+    if image.read(entry, sigs::GAME_SWITCHER_ENTRY.len()).as_deref() != Some(sigs::GAME_SWITCHER_ENTRY) {
+        return Err("pause list entry changed (game update?)".into());
     }
-    let switcher = function + sigs::BUSY_AT;
-    SWITCHER_BUSY.store(rip_target(image, switcher, 3, 7).ok_or("pause list busy flag unreadable")?, Ordering::Release);
-    Ok(())
+    let Some((_, table_at, opcode)) = sigs::GAME_SWITCHER_LAYOUTS.iter()
+        .find(|&&(busy_at, _, _)| busy.checked_sub(entry) == Some(busy_at))
+    else {
+        return Err("pause list popup check moved (game update?)".into());
+    };
+    let table = entry.checked_add(*table_at).and_then(|at| image.read(at, 7))
+        .ok_or("pause list table load unreadable")?;
+    if table[..3] != opcode[..] || table[3..] != (sigs::TABLE_OFFSET as u32).to_le_bytes() {
+        return Err("pause list table layout changed (game update?)".into());
+    }
+    let global = busy.checked_add(sigs::BUSY_DISP_AT).and_then(|at| image.rel32_target(at));
+    if global != Some(data_slot) {
+        return Err("pause list popup check uses a different app pointer (game update?)".into());
+    }
+    Ok(entry)
 }
 
 /// The id of the Options page on top of the game's page stack.
@@ -1363,5 +1382,24 @@ mod tests {
         let boolean = image.find_unique(&Pattern::parse(sigs::BOOLEAN).unwrap()).unique().unwrap();
         assert_eq!(row_disabled_offset(&image, boolean), Some(0x18));
         println!("Read-only disabled-row check: Boolean RVA {boolean:#x}, page offset 0x18");
+    }
+
+    #[test]
+    #[ignore = "requires an explicitly supplied executable path"]
+    fn pause_switcher_matches_supplied_executable() {
+        let path = std::env::var_os("NMS_PAUSE_CHECK_EXE").expect("set NMS_PAUSE_CHECK_EXE");
+        let mut image = FileImage::load(std::path::Path::new(&path)).unwrap();
+        let global = nms_core::game::resolve(&image).unwrap().data_slot;
+        let entry = pause_switcher(&image, global).unwrap();
+        let busy = sigs::GAME_SWITCHER_BUSY.locate(&image).unwrap().unique().unwrap();
+        println!("Read-only pause check: entry {entry:#x}, popup check {busy:#x}, app slot {global:#x}");
+        assert!(pause_switcher(&image, global + 8).unwrap_err().contains("different app pointer"));
+
+        // A matching dispatcher and popup check are insufficient if the page field moved.
+        let (_, table_at, _) = sigs::GAME_SWITCHER_LAYOUTS.iter()
+            .find(|&&(busy_at, _, _)| busy == entry + busy_at)
+            .unwrap();
+        image.write(entry + table_at + 3, &[0]).unwrap();
+        assert!(pause_switcher(&image, global).unwrap_err().contains("table layout changed"));
     }
 }

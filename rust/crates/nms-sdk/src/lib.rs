@@ -5,6 +5,8 @@
 //! without the `_SIG` suffix, same hex), so a reviewer can diff them line by line.
 
 pub use nms_core::CodePatch;
+use nms_core::pattern::PatternError;
+use nms_core::{Code, Lookup, Pattern};
 
 pub mod sigs;
 
@@ -13,6 +15,8 @@ pub mod sigs;
 pub enum SigUse {
     /// Start of a function that gets a hook.
     Hook,
+    /// A direct call whose target gets a hook. The offset points to the E8 opcode.
+    HookCall(usize),
     /// Code read to find an address, a call target or a cave site.
     Locate,
 }
@@ -22,6 +26,24 @@ pub struct Sig {
     pub name: &'static str,
     pub pattern: &'static str,
     pub kind: SigUse,
+}
+
+impl Sig {
+    /// Resolve the location used by the mod. Call signatures resolve to the callee.
+    pub fn locate(&self, code: &dyn Code) -> Result<Lookup, PatternError> {
+        let hit = code.find_unique(&Pattern::parse(self.pattern)?);
+        let (SigUse::HookCall(call_at), Lookup::Unique(rva)) = (self.kind, hit) else {
+            return Ok(hit);
+        };
+        let target = rva.checked_add(call_at).and_then(|call| {
+            if code.read(call, 1)?.as_slice() != [0xE8] {
+                return None;
+            }
+            let target = code.rel32_target(call.checked_add(1)?)?;
+            code.exec_ranges().iter().any(|range| range.contains(&target)).then_some(target)
+        });
+        Ok(target.map_or(Lookup::Missing, Lookup::Unique))
+    }
 }
 
 /// All signatures of one mod.
@@ -41,7 +63,7 @@ pub fn all() -> &'static [ModSigs] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nms_core::Pattern;
+    use nms_core::FileImage;
     use std::collections::HashSet;
 
     #[test]
@@ -69,5 +91,16 @@ mod tests {
                 assert!(seen.insert(p.label), "{}: duplicate patch {}", m.owner, p.label);
             }
         }
+    }
+
+    #[test]
+    fn direct_call_hook_requires_a_unique_call_to_executable_code() {
+        let sig = Sig { name: "call", pattern: "90 E8 ? ? ? ?", kind: SigUse::HookCall(1) };
+        let bytes = [0x90, 0xE8, 1, 0, 0, 0, 0x90, 0xC3];
+        assert_eq!(sig.locate(&FileImage::from_code(&bytes)).unwrap(), Lookup::Unique(7));
+        let outside = [0x90, 0xE8, 2, 0, 0, 0, 0x90, 0xC3];
+        assert_eq!(sig.locate(&FileImage::from_code(&outside)).unwrap(), Lookup::Missing);
+        let duplicate = [bytes, bytes].concat();
+        assert!(matches!(sig.locate(&FileImage::from_code(&duplicate)).unwrap(), Lookup::Multiple(_)));
     }
 }

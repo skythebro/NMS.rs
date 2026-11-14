@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use nms_core::{Code, Lookup, Pattern};
+use nms_core::{Code, Lookup};
 use nms_sdk::{ModSigs, SigUse};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,8 +48,8 @@ pub fn check(code: &dyn Code, tables: &[ModSigs]) -> Vec<Line> {
     let mut lines = Vec::new();
     for m in tables {
         for s in m.sigs {
-            let (ok, detail, rva) = match Pattern::parse(s.pattern) {
-                Ok(p) => describe(code.find_unique(&p)),
+            let (ok, detail, rva) = match s.locate(code) {
+                Ok(hit) => describe(hit),
                 Err(e) => (false, e.to_string(), None),
             };
             lines.push(Line { owner: m.owner, name: s.name, ok, detail, rva });
@@ -159,19 +159,20 @@ pub fn overlaps(code: &dyn Code, tables: &[ModSigs]) -> Vec<Overlap> {
     let mut found = Vec::new();
     for m in tables {
         for s in m.sigs {
-            let Ok(p) = Pattern::parse(s.pattern) else { continue };
-            if let Lookup::Unique(rva) = code.find_unique(&p) {
-                found.push((m.owner, s.name, s.kind == SigUse::Hook, rva, s.pattern.split_whitespace().count()));
+            if let Ok(Lookup::Unique(rva)) = s.locate(code) {
+                let span = match s.kind {
+                    SigUse::Hook => s.pattern.split_whitespace().count(),
+                    SigUse::HookCall(_) => HOOK_SPAN,
+                    SigUse::Locate => continue,
+                };
+                found.push((m.owner, s.name, rva, span));
             }
         }
     }
     let mut out = Vec::new();
-    for &(h_owner, h_name, is_hook, h_rva, _) in &found {
-        if !is_hook {
-            continue;
-        }
-        for &(o_owner, o_name, o_hook, o_rva, o_len) in &found {
-            if o_owner == h_owner || !o_hook {
+    for &(h_owner, h_name, h_rva, _) in &found {
+        for &(o_owner, o_name, o_rva, o_len) in &found {
+            if o_owner == h_owner {
                 continue;
             }
             if o_rva < h_rva + HOOK_SPAN && h_rva < o_rva + o_len {
@@ -261,5 +262,27 @@ mod tests {
         assert_eq!((found[0].hook, found[0].other), (("A", "fn"), ("B", "same")));
         assert_eq!((found[1].hook, found[1].other), (("B", "same"), ("A", "fn")));
         assert!(!found[0].shared);
+    }
+
+    #[test]
+    fn checks_overlap_at_call_destination() {
+        const CALL: ModSigs = ModSigs {
+            owner: "call",
+            sigs: &[Sig { name: "called", pattern: "E8 ? ? ? ?", kind: SigUse::HookCall(0) }],
+            patches: &[],
+        };
+        const ENTRY: ModSigs = ModSigs {
+            owner: "entry",
+            sigs: &[Sig { name: "direct", pattern: "AA BB", kind: SigUse::Hook }],
+            patches: &[],
+        };
+        let mut bytes = vec![0xE8, 27, 0, 0, 0];
+        bytes.resize(32, 0x90);
+        bytes.extend([0xAA, 0xBB]);
+        let image = FileImage::from_code(&bytes);
+        assert_eq!(check(&image, &[CALL])[0].rva, Some(32));
+        let overlaps = overlaps(&image, &[CALL, ENTRY]);
+        assert_eq!(overlaps.len(), 2);
+        assert!(overlaps.iter().all(|overlap| overlap.rva == 32 && !overlap.shared));
     }
 }

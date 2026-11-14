@@ -33,7 +33,9 @@ folder, so the old and new loader never hook the same function.
 
 - No address is hard-coded. Every function or patch site is found by a byte pattern with
   wildcards, listed per mod in `crates/nms-sdk/src/sigs`. A pattern must match exactly once; no
-  match or two matches means "not found", and that part of the mod stays off.
+  match or two matches means "not found", and that part of the mod stays off. A hook signature
+  can also match a direct call and resolve its callee. In that case the offline check reports
+  the callee's address and checks it for hook overlap.
 - Byte patches fail closed. A patch is written only when the bytes at the site are exactly the
   expected original. Once written, it is found again by its patched bytes, so the same call can
   undo it. Any other state logs "not changed" and leaves the game vanilla.
