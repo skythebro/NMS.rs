@@ -23,24 +23,39 @@ pub const REQUEST_OPTIONS_PAGE: &str = "48 89 5C 24 08 48 89 74 24 20 57 48 81 E
 pub const PAGE_TITLE: &str = "40 53 48 83 EC 40 66 0F 6F 0D ? ? ? ? 48 BB 69 2D 38 EB 08 EA DF 9D";
 pub const TITLE_ROOT_AT: usize = 0xCD;
 
-/// `cGcFrontendPageOptions::DoGameSwitcher`: draws the pause-menu Options list (nmspy pattern).
-pub const GAME_SWITCHER: &str = "48 8B C4 55 53 56 57 41 54 41 55 41 56 41 57 48 8D A8 ? ? ? ? 48 81 EC ? ? ? ? 66 0F 6F 0D";
+/// Pause-page dispatch cases. The third call takes the page in rcx and targets
+/// `cGcFrontendPageOptions::DoGameSwitcher`. Its prologue changes between 184271 and 185034.
+pub const GAME_SWITCHER: Sig = Sig {
+    name: "GAME_SWITCHER",
+    pattern: "49 8B CE E8 ? ? ? ? B3 01 E9 ? ? ? ? E8 ? ? ? ? B3 01 E9 ? ? ? ? \
+              49 8B CE E8 ? ? ? ? B3 01 E9 ? ? ? ? E8 ? ? ? ? B3 01 E9 ? ? ? ?",
+    kind: SigUse::HookCall(30),
+};
+pub const GAME_SWITCHER_ENTRY: &[u8] =
+    &[0x48, 0x8B, 0xC4, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57, 0x48, 0x8D, 0xA8];
 /// Finds a child element by name: `(element, &name16, recursive) -> element`. The page pass uses it
 /// for `WHITE`. The call at the end is relative, so the pattern stops before it.
 pub const FIND_CHILD: &str = "48 89 5C 24 08 57 48 83 EC 40 48 8B 99 50 01 00 00 41 0F B6 F8 45 33 C0 48 8D 4C 24 20 E8";
 /// `cGcFrontendPage::Confirm` (`0x140901CF0`): hover and click test for one element (same function the
 /// shop uses). `cmp byte [rcx+0x14C84], 0` is the page's input byte (`0x14C44` before build 183791).
 pub const CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 84 4C 01 00 00";
-/// Inside `DoGameSwitcher`, at `BUSY_AT`: `mov rcx, [rip+disp32]`; at `BUSY_CHECK_AT`, two
-/// instructions later: `cmp byte [rcx+0x87fd5a], 0` (`0x8594c2` before build 183791). The page skips
-/// its click tests while that byte is set (a popup is open); so do we.
-pub const BUSY_AT: usize = 0xCCF;
-pub const BUSY_CHECK_AT: usize = 0xCEE;
-pub const BUSY_CODE: [u8; 3] = [0x48, 0x8B, 0x0D];
-pub const BUSY_CHECK: [u8; 7] = [0x80, 0xB9, 0x5A, 0xFD, 0x87, 0x00, 0x00];
+/// `mov rcx, [rip+disp32]` loads the app pointer, then `cmp byte [rcx+0x87fd5a], 0`
+/// and `jne` skip the click tests while a popup is open. The block moved within the function.
+pub const GAME_SWITCHER_BUSY: Sig = Sig {
+    name: "GAME_SWITCHER_BUSY",
+    pattern: "48 8B 0D ? ? ? ? 66 0F 6F 3D ? ? ? ? 66 44 0F 6F 05 ? ? ? ? \
+              48 89 85 ? ? ? ? 80 B9 5A FD 87 00 00 0F 85 ? ? ? ? 4D 85 E4 0F 84",
+    kind: SigUse::Locate,
+};
+pub const BUSY_DISP_AT: usize = 3;
 pub const BUSY_OFFSET: usize = 0x87FD5A;
 /// Offset of the pause page's element table, the first argument of the name lookup.
 pub const TABLE_OFFSET: usize = 0x14478;
+/// Verified (busy block offset, table load offset, table load opcode) from the function entry.
+pub const GAME_SWITCHER_LAYOUTS: &[(usize, usize, [u8; 3])] = &[
+    (0xCCF, 0x128, [0x48, 0x8B, 0x8E]), // 184271: mov rcx, [rsi+table]
+    (0x2CB, 0x1D, [0x48, 0x8B, 0x99]),   // 185034: mov rbx, [rcx+table]
+];
 
 /// The game's text-entry popup (`cGcFrontendTextInput`, the box that renames a storage container).
 pub const TEXT_START: &str = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 81 EC 90 00 00 00 33 DB 44 88 89 F8 0A 00 00";
@@ -89,7 +104,8 @@ pub const TABLE: ModSigs = ModSigs {
         Sig { name: "FINALIZE_PAGE", pattern: FINALIZE_PAGE, kind: SigUse::Hook },
         Sig { name: "END_PAGE", pattern: END_PAGE, kind: SigUse::Hook },
         Sig { name: "PAGE_TITLE", pattern: PAGE_TITLE, kind: SigUse::Hook },
-        Sig { name: "GAME_SWITCHER", pattern: GAME_SWITCHER, kind: SigUse::Hook },
+        GAME_SWITCHER,
+        GAME_SWITCHER_BUSY,
         Sig { name: "FIND_CHILD", pattern: FIND_CHILD, kind: SigUse::Locate },
         Sig { name: "CONFIRM", pattern: CONFIRM, kind: SigUse::Locate },
         Sig { name: "TEXT_START", pattern: TEXT_START, kind: SigUse::Locate },
