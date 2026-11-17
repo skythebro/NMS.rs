@@ -43,3 +43,4 @@ jobs:
         run: |
           cargo build --release -p nms-launcher -p nms-proxy
           python -I ../dev/test_release_rust.py
+          python -I ../dev/test_clean_install.py

@@ -43,6 +43,9 @@ jobs:
       - name: Check zip contents
         run: python -I dev/test_release_rust.py
 
+      - name: Clean install into an empty game folder
+        run: python -I dev/test_clean_install.py out/NMS.rs-${{ env.VERSION }}.zip
+
       - name: Check the winmm.dll and version.dll loaders pass calls through
         run: python -I dev/test_proxy_variants.py
 
