@@ -169,6 +169,8 @@
   "rs_not_installed": "未安裝",
   "rs_outdated": "有可用更新",
   "rs_side_bar_old": "你的 Smaller Inventory Slots 側邊欄來自舊版本。按一次 {button}，即可加入新的篩選按鈕（食物、自訂）和新圖示。",
+  "rs_loader_twice": "Binaries 中有兩個 NMS.rs 載入器檔案:{files}。只有其中一個會執行模組。請關閉遊戲,刪除不需要的那個。",
+  "rs_wrong_folder": "NMS.rs 放錯了資料夾,所以不顯示任何模組,載入器也不會啟動。此視窗從 {here} 執行。請關閉它,並把 zip 解壓縮到 {root},讓 NMS.rs\\nms-rs.exe 和 Binaries\\xinput9_1_0.dll 位於該處。",
   "rs_click_to_open": "（點一下展開）",
   "rs_cleanup_title": "清理舊檔案",
   "rs_cleanup_nothing_hint": "無需清理",

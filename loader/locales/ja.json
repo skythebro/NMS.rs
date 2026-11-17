@@ -169,6 +169,8 @@
   "rs_not_installed": "未インストール",
   "rs_outdated": "更新あり",
   "rs_side_bar_old": "Smaller Inventory Slots のサイドバーは古いバージョンのものです。{button} を一度押すと、新しいフィルターボタン（食品、カスタム）と新しいアイコンが追加されます。",
+  "rs_loader_twice": "Binaries に NMS.rs のローダーファイルが2つあります: {files}。MOD を動かすのはそのうち1つだけです。ゲームを閉じて、不要な方を削除してください。",
+  "rs_wrong_folder": "NMS.rs のフォルダーが正しくないため、MOD が表示されず、ローダーも起動しません。このウィンドウは {here} から実行されています。閉じてから、zip を {root} に展開し、NMS.rs\\nms-rs.exe と Binaries\\xinput9_1_0.dll がそこに入るようにしてください。",
   "rs_click_to_open": "（クリックで開く）",
   "rs_cleanup_title": "古いファイルの整理",
   "rs_cleanup_nothing_hint": "整理するものはありません",

@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
-pub const MADE_FOR: &str = "184271";
+pub const MADE_FOR: &str = "185034";
 const COMBINED_NAME: &str = "z_Combined Mods";
 const MARKER: &[u8] = b"svn.hellogames.dev";
 
@@ -56,6 +56,20 @@ pub fn build_status_from_id(ver: Option<&str>) -> (&'static str, String) {
         _ if ver == MADE_FOR => ("ok", line),
         _ => ("warn", line + " This is a different build; Rust features turn off if their code moved."),
     }
+}
+
+/// The folder this program runs from, when it is inside the game folder but not in `NMS.rs`
+/// (the zip extracted into `Binaries` or into a subfolder). Its stock files are then not found,
+/// so the manager lists no mods, and the loader DLL is not next to NMS.exe either.
+pub fn misplaced_here(root: &Path) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    misplaced(root, exe.parent()?)
+}
+
+fn misplaced(root: &Path, here: &Path) -> Option<PathBuf> {
+    let norm = |p: &Path| p.to_string_lossy().trim_end_matches(['\\', '/']).to_ascii_lowercase();
+    let inside = norm(here).starts_with(&norm(root));
+    (inside && norm(here) != norm(&paths::loader_dir(root))).then(|| here.to_path_buf())
 }
 
 pub fn game_build_status(root: &Path) -> (&'static str, String) {
@@ -358,6 +372,16 @@ pub fn pack_logs(root: &Path) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn misplaced_only_inside_the_game_folder_and_not_in_nms_rs() {
+        let root = Path::new(r"C:\Games\No Man's Sky");
+        assert_eq!(misplaced(root, &root.join("NMS.rs")), None);
+        assert_eq!(misplaced(root, Path::new(r"c:\games\no man's sky\nms.rs\")), None);
+        let wrong = root.join("Binaries").join("NMS.rs");
+        assert_eq!(misplaced(root, &wrong), Some(wrong.clone()));
+        assert_eq!(misplaced(root, Path::new(r"D:\Build\target\release")), None);
+    }
 
     fn temp_root(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("nms-launcher-files-{tag}-{}", std::process::id()));

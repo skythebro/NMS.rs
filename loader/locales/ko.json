@@ -169,6 +169,8 @@
   "rs_not_installed": "설치 안 됨",
   "rs_outdated": "업데이트 있음",
   "rs_side_bar_old": "Smaller Inventory Slots 사이드 바가 이전 버전의 것입니다. {button}을(를) 한 번 누르면 새 필터 버튼(음식, 사용자)과 새 아이콘이 추가됩니다.",
+  "rs_loader_twice": "Binaries에 NMS.rs 로더 파일이 두 개 있습니다: {files}. 그중 하나만 모드를 실행합니다. 게임을 닫고 필요 없는 파일을 삭제하세요.",
+  "rs_wrong_folder": "NMS.rs가 잘못된 폴더에 있어서 모드가 표시되지 않고 로더도 시작되지 않습니다. 이 창은 {here}에서 실행 중입니다. 창을 닫고 zip을 {root}에 압축 해제하여 NMS.rs\\nms-rs.exe와 Binaries\\xinput9_1_0.dll이 그곳에 들어가게 하세요.",
   "rs_click_to_open": "(클릭해서 열기)",
   "rs_cleanup_title": "오래된 파일 정리",
   "rs_cleanup_nothing_hint": "정리할 것 없음",

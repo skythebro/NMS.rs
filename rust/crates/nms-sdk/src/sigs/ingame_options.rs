@@ -23,8 +23,12 @@ pub const REQUEST_OPTIONS_PAGE: &str = "48 89 5C 24 08 48 89 74 24 20 57 48 81 E
 pub const PAGE_TITLE: &str = "40 53 48 83 EC 40 66 0F 6F 0D ? ? ? ? 48 BB 69 2D 38 EB 08 EA DF 9D";
 pub const TITLE_ROOT_AT: usize = 0xCD;
 
-/// `cGcFrontendPageOptions::DoGameSwitcher`: draws the pause-menu Options list (nmspy pattern).
-pub const GAME_SWITCHER: &str = "48 8B C4 55 53 56 57 41 54 41 55 41 56 41 57 48 8D A8 ? ? ? ? 48 81 EC ? ? ? ? 66 0F 6F 0D";
+/// `cGcFrontendPageOptions::DoGameSwitcher` (`0x1406F0710`, build 185034): draws the pause-menu Options
+/// list. Takes the page in rcx only. Since 185034 it starts by loading the element table
+/// (`mov rbx,[rcx+0x14478]`) and calls the name hash instead of inlining it (before:
+/// `... 48 81 EC ? ? ? ? 66 0F 6F 0D`).
+pub const GAME_SWITCHER: &str =
+    "48 8B C4 55 53 56 57 41 54 41 55 41 56 41 57 48 8D A8 ? ? ? ? 48 81 EC ? ? ? ? 48 8B 99 78 44 01 00 48 8D 55 ? 66 0F 6F 05";
 /// Finds a child element by name: `(element, &name16, recursive) -> element`. The page pass uses it
 /// for `WHITE`. The call at the end is relative, so the pattern stops before it.
 pub const FIND_CHILD: &str = "48 89 5C 24 08 57 48 83 EC 40 48 8B 99 50 01 00 00 41 0F B6 F8 45 33 C0 48 8D 4C 24 20 E8";
@@ -34,8 +38,9 @@ pub const CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 84
 /// Inside `DoGameSwitcher`, at `BUSY_AT`: `mov rcx, [rip+disp32]`; at `BUSY_CHECK_AT`, two
 /// instructions later: `cmp byte [rcx+0x87fd5a], 0` (`0x8594c2` before build 183791). The page skips
 /// its click tests while that byte is set (a popup is open); so do we.
-pub const BUSY_AT: usize = 0xCCF;
-pub const BUSY_CHECK_AT: usize = 0xCEE;
+/// Build 185034: `0x2CB` / `0x2EA` (`0xCCF` / `0xCEE` before).
+pub const BUSY_AT: usize = 0x2CB;
+pub const BUSY_CHECK_AT: usize = 0x2EA;
 pub const BUSY_CODE: [u8; 3] = [0x48, 0x8B, 0x0D];
 pub const BUSY_CHECK: [u8; 7] = [0x80, 0xB9, 0x5A, 0xFD, 0x87, 0x00, 0x00];
 pub const BUSY_OFFSET: usize = 0x87FD5A;

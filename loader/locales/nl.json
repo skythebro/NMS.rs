@@ -169,6 +169,8 @@
   "rs_not_installed": "niet geïnstalleerd",
   "rs_outdated": "update beschikbaar",
   "rs_side_bar_old": "Je zijbalk van Smaller Inventory Slots komt uit een oudere versie. Druk één keer op {button} om de nieuwe filterknoppen (Voedsel, Eigen) en de nieuwe pictogrammen toe te voegen.",
+  "rs_loader_twice": "Er staan twee NMS.rs-loaderbestanden in Binaries: {files}. Maar één ervan start de mods. Sluit het spel en verwijder het bestand dat je niet nodig hebt.",
+  "rs_wrong_folder": "NMS.rs staat in de verkeerde map, daarom worden er geen mods getoond en start de loader niet. Dit venster draait vanuit {here}. Sluit het en pak de zip uit in {root}, zodat NMS.rs\\nms-rs.exe en Binaries\\xinput9_1_0.dll daar terechtkomen.",
   "rs_click_to_open": "(klik om te openen)",
   "rs_cleanup_title": "Oude bestanden opruimen",
   "rs_cleanup_nothing_hint": "niets op te ruimen",

@@ -271,6 +271,8 @@ struct Manager {
     side_bar_old: bool,
     /// Names under which an NMS.rs loader DLL sits in Binaries (`proxy::installed`).
     loaders: Vec<&'static str>,
+    /// This program's folder when it is not `<game>\\NMS.rs` (zip extracted in the wrong place).
+    misplaced: Option<PathBuf>,
     /// What is left of an old NMS.py (version 3) setup; `None` until the first check is back.
     legacy: Option<Legacy>,
     /// The check runs on its own thread (it walks NMS.py and reads Steam's config).
@@ -359,6 +361,7 @@ impl Manager {
         let rows = rows_from_disk(&root);
         let side_bar_old = mods::side_bar_outdated(&root);
         let loaders = proxy::installed(&root);
+        let misplaced = crate::files::misplaced_here(&root);
         let sizes = load_size_fields(&root);
         let prefs = mset::load(&root);
         let i18n = I18n::new(&prefs.language);
@@ -378,6 +381,7 @@ impl Manager {
             sizes_open: false,
             side_bar_old,
             loaders,
+            misplaced,
             tab: Tab::Mods,
             failed: false,
             message: String::new(),
@@ -965,6 +969,17 @@ impl Manager {
 
     /// Two NMS.rs loader files in Binaries (say xinput9_1_0.dll and winmm.dll): only the first to
     /// load runs the mods, the other only passes calls through.
+    fn misplaced_note(&self, ui: &mut egui::Ui) {
+        let Some(here) = &self.misplaced else { return };
+        let text = self
+            .i18n
+            .t("rs_wrong_folder")
+            .replace("{here}", &here.display().to_string())
+            .replace("{root}", &self.root.display().to_string());
+        ui.add(egui::Label::new(egui::RichText::new(text).color(pal::WARN).strong()).wrap());
+        ui.add_space(st::S3);
+    }
+
     fn loader_note(&self, ui: &mut egui::Ui) {
         if self.loaders.len() < 2 {
             return;
@@ -1571,6 +1586,7 @@ impl Manager {
 
     /// The scrolling page of the Mods tab: notices, the card grid and Sizes.
     fn mods_page(&mut self, ui: &mut egui::Ui, running: bool) {
+        self.misplaced_note(ui);
         self.legacy_panel(ui, running);
         self.linux_note(ui);
         self.loader_note(ui);

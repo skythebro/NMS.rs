@@ -271,9 +271,15 @@ pub fn is_outdated(root: &Path, name: &str, folder: &Path) -> bool {
         return false;
     }
     let live = fingerprint(folder, name);
+    // A file the UI merge set aside as `<name>.merged` is in use through z_Combined Mods; counting it
+    // as missing made Update put it back and the next game start set it aside again, every time.
+    let set_aside = |rel: &str| {
+        let live_path = folder.join(rel);
+        !live_path.is_file() && live_path.with_file_name(format!("{}.merged", live_path.file_name().unwrap_or_default().to_string_lossy())).is_file()
+    };
     let mismatches: Vec<&String> = wanted
         .iter()
-        .filter(|(rel, digest)| live.get(*rel) != Some(digest))
+        .filter(|(rel, digest)| live.get(*rel) != Some(digest) && !set_aside(rel))
         .map(|(rel, _)| rel)
         .collect();
     if mismatches.is_empty() {
@@ -876,6 +882,22 @@ mod tests {
             "{\"write_log\": true}\n"
         );
         assert_eq!(fs::read_to_string(live.join("UI").join("POPUP.MBIN")).unwrap(), "old-ui\n");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn file_set_aside_by_the_merge_is_not_outdated() {
+        let root = temp_root("merged");
+        let stock = stock_dir(&root).join("CompactQuickTransfer");
+        write(&stock.join("CompactQuickTransfer.lua"), "lua\n");
+        write(&stock.join("UI").join("POPUP_TRANSFERSEND.MBIN"), "ui\n");
+        let live = mods_dir(&root).join("CompactQuickTransfer");
+        write(&live.join("CompactQuickTransfer.lua"), "lua\n");
+        write(&live.join("UI").join("POPUP_TRANSFERSEND.MBIN.merged"), "ui\n");
+        assert!(!is_outdated(&root, "CompactQuickTransfer", &live));
+        // Gone for real (no set-aside copy): still offered.
+        fs::remove_file(live.join("UI").join("POPUP_TRANSFERSEND.MBIN.merged")).unwrap();
+        assert!(is_outdated(&root, "CompactQuickTransfer", &live));
         let _ = fs::remove_dir_all(&root);
     }
 

@@ -738,14 +738,14 @@ mod tests {
         let Some(exe) = exe else { return };
         let image = nms_core::FileImage::load(&exe).unwrap();
         let at = locate(&image).unwrap();
-        // Exe of 89,535,560 bytes, build 184271.
-        assert_eq!(at.filter, 0x155DF1D);
-        assert_eq!(at.join, 0x155DF2B);
-        assert_eq!(at.skip, 0x155E003);
-        assert_eq!(at.global, 0x6F6B208);
-        assert_eq!(at.select, 0x1439D10);
-        assert_eq!(at.action, 0x156A86F);
-        assert_eq!(at.set_primary, 0x1434BB0);
+        // Exe of 89,540,680 bytes, build 185034.
+        assert_eq!(at.filter, 0x155E35D);
+        assert_eq!(at.join, 0x155E36B);
+        assert_eq!(at.skip, 0x155E443);
+        assert_eq!(at.global, 0x6F6C288);
+        assert_eq!(at.select, 0x143A0B0);
+        assert_eq!(at.action, 0x156ACAF);
+        assert_eq!(at.set_primary, 0x1434F50);
         let base = 0x1_4000_0000usize;
         let cave = base + 0x7000_0000;
         let body = filter_cave(cave, base + at.join, base + at.skip).unwrap();

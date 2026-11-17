@@ -169,6 +169,8 @@
   "rs_not_installed": "não instalado",
   "rs_outdated": "atualização disponível",
   "rs_side_bar_old": "A tua barra lateral do Smaller Inventory Slots é de uma versão antiga. Carrega uma vez em {button} para adicionar os novos botões de filtro (Comida, Pessoal) e os novos ícones.",
+  "rs_loader_twice": "Há dois ficheiros do loader NMS.rs em Binaries: {files}. Só um deles arranca os mods. Fecha o jogo e apaga o que não precisas.",
+  "rs_wrong_folder": "O NMS.rs está na pasta errada, por isso nenhum mod aparece e o loader não arranca. Esta janela corre a partir de {here}. Fecha-a e extrai o zip para {root}, para que NMS.rs\\nms-rs.exe e Binaries\\xinput9_1_0.dll fiquem lá.",
   "rs_click_to_open": "(clica para abrir)",
   "rs_cleanup_title": "Limpar ficheiros antigos",
   "rs_cleanup_nothing_hint": "nada para limpar",

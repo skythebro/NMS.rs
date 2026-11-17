@@ -196,6 +196,13 @@ fn main() -> ExitCode {
     } else {
         None
     };
+    if let Some(here) = root.as_deref().and_then(files::misplaced_here) {
+        eprintln!(
+            "NMS.rs is in the wrong folder ({}). Extract the zip into {} so that NMS.rs\\nms-rs.exe and Binaries\\xinput9_1_0.dll land there.",
+            here.display(),
+            root.as_deref().map(|r| r.display().to_string()).unwrap_or_default()
+        );
+    }
     if manager {
         let Some(r) = root else {
             return ExitCode::from(2);
