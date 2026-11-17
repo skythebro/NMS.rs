@@ -30,6 +30,7 @@ use serde_json::{json, Value};
 mod cards;
 mod files;
 mod fonts;
+mod game_process;
 mod i18n;
 mod manager_settings;
 mod merge;

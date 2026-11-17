@@ -11,6 +11,7 @@ use std::process::{Command, ExitCode};
 use nms_core::paths;
 
 use crate::files;
+use crate::game_process::{self, GameStatus};
 use crate::shortcut::{self, Spec};
 use crate::steam;
 use crate::store::{self, Store};
@@ -22,7 +23,7 @@ const VORTEX_MARKERS: &[&str] = &["vortex.deployment.json", "__folder_managed_by
 const USAGE: &str = "usage: nms-rs setup [--yes] [--no-shortcut] [--force]";
 
 pub(crate) struct SetupHooks {
-    pub game_is_running: fn() -> bool,
+    pub game_status: fn() -> GameStatus,
     pub install: fn(&Path, bool) -> Result<String, String>,
     pub apply_steam: fn(&Path, bool) -> Result<Vec<String>, String>,
     pub launch_options: fn() -> Vec<String>,
@@ -250,10 +251,6 @@ fn ask_shortcut_stdin() -> bool {
     read_yes("  [Y/N] ")
 }
 
-fn prod_running() -> bool {
-    files::game_is_running()
-}
-
 /// The launch option points at `<game>\NMS.rs\nms-rs.exe`, so that copy must exist even when Setup runs from elsewhere.
 fn prod_install(root: &Path, force: bool) -> Result<String, String> {
     let msg = crate::install(root, force)?;
@@ -287,7 +284,7 @@ fn prod_create(spec: &Spec) -> Option<String> {
 
 fn production_hooks() -> SetupHooks {
     SetupHooks {
-        game_is_running: prod_running,
+        game_status: game_process::status,
         install: prod_install,
         apply_steam: prod_apply,
         launch_options: prod_options,
@@ -315,6 +312,10 @@ fn maybe_shortcut(out: &Out, game: &Path, offer: bool, direct: bool, hooks: &Set
 }
 
 pub(crate) fn run_in_game(game: &Path, yes: bool, no_shortcut: bool, force: bool, hooks: &SetupHooks) -> ExitCode {
+    if let Err(error) = (hooks.game_status)().require_closed() {
+        eprintln!("{error}");
+        return ExitCode::FAILURE;
+    }
     let out = Out::open(game);
     out.tick(&format!("Game: {}", game.display()));
     let store = store::kind(game);
@@ -329,9 +330,6 @@ pub(crate) fn run_in_game(game: &Path, yes: bool, no_shortcut: bool, force: bool
         out.tick("GOG: Play starts Binaries\\NMS.exe");
     } else if direct {
         out.tick("No Steam: Play starts Binaries\\NMS.exe");
-    }
-    if (hooks.game_is_running)() {
-        return out.fail("The game is running.", "Close No Man's Sky, then run setup again.");
     }
     match (hooks.install)(game, force) {
         Ok(msg) => out.tick(&msg),
@@ -400,7 +398,11 @@ fn extract_fix(game: &Path) -> String {
     )
 }
 
-fn relocate_and_reexec(here: &Path, game: &Path, flags: &[&str]) -> ExitCode {
+fn relocate_and_reexec(here: &Path, game: &Path, flags: &[&str], status: &GameStatus) -> ExitCode {
+    if let Err(error) = status.require_closed() {
+        eprintln!("{error}");
+        return ExitCode::FAILURE;
+    }
     let dest = paths::loader_dir(game);
     println!("  No Man's Sky is at {}", game.display());
     match copy_nms_rs(here, &dest) {
@@ -462,7 +464,7 @@ pub(crate) fn cli(args: &[&str]) -> ExitCode {
     if !yes && !read_yes("  Copy NMS.rs and the mods there? [Y/N] ") {
         return fail_no_log("Could not find No Man's Sky.", &extract_fix(&game));
     }
-    relocate_and_reexec(&here, &game, args)
+    relocate_and_reexec(&here, &game, args, &game_process::status())
 }
 
 #[cfg(test)]
@@ -487,8 +489,8 @@ mod tests {
         std::fs::write(path, body).unwrap();
     }
 
-    fn never_running() -> bool {
-        false
+    fn never_running() -> GameStatus {
+        GameStatus::Closed
     }
 
     fn panic_install(_: &Path, _: bool) -> Result<String, String> {
@@ -522,7 +524,7 @@ mod tests {
 
     fn gog_hooks() -> SetupHooks {
         SetupHooks {
-            game_is_running: never_running,
+            game_status: never_running,
             install: ok_install,
             apply_steam: panic_steam,
             launch_options: no_opts,
@@ -535,7 +537,7 @@ mod tests {
 
     fn game_pass_hooks() -> SetupHooks {
         SetupHooks {
-            game_is_running: never_running,
+            game_status: never_running,
             install: panic_install,
             apply_steam: panic_steam,
             launch_options: no_opts,
@@ -544,6 +546,19 @@ mod tests {
             ask_shortcut: no_ask,
             create_shortcut: no_shortcut,
         }
+    }
+
+    #[test]
+    fn setup_and_relocation_stop_before_writing_if_status_is_unknown() {
+        let src = temp_dir("setup-unknown-src");
+        let target = temp_dir("setup-unknown-target");
+        let unknown = || GameStatus::Unknown("snapshot failed".into());
+        let hooks = SetupHooks { game_status: unknown, install: panic_install, ..gog_hooks() };
+        assert_eq!(run_in_game(&target, true, true, false, &hooks), ExitCode::FAILURE);
+        assert_eq!(relocate_and_reexec(&src, &target, &[], &unknown()), ExitCode::FAILURE);
+        assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+        let _ = std::fs::remove_dir_all(&src);
+        let _ = std::fs::remove_dir_all(&target);
     }
 
     #[test]
