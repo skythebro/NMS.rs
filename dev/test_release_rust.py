@@ -28,7 +28,12 @@ def check_variant_zips() -> None:
         return
     with tempfile.TemporaryDirectory() as tmp:
         made = release.make_variant_zips("4.0.0", Path(tmp))
-        assert [p.name for p in made] == ["NMS.rs-4.0.0-winmm.zip", "NMS.rs-4.0.0-version.zip"], made
+        assert [p.name for p in made] == ["NMS.rs-4.0.0-winmm.zip", "NMS.rs-4.0.0-version.zip", "NMS.rs-4.0.0-asi.zip"], made
+        with zipfile.ZipFile(made[-1]) as z:
+            asi = release.ASI_FILE
+            assert sorted(z.namelist()) == [f"Binaries/{asi}", f"NMS.rs/{asi}", "README.txt"], z.namelist()
+            assert "—" not in z.read("README.txt").decode(), "em dash in README"
+            assert b"NMS.rs asi marker" in z.read(f"Binaries/{asi}"), "not the ASI build"
         for path, dll in zip(made, release.PROXY_VARIANTS):
             sidecar = Path(tmp) / f"{path.name}.sha256"
             assert sidecar.read_text().split()[0] == release._sha256(path), f"bad {sidecar.name}"
@@ -54,6 +59,7 @@ def main() -> int:
     low = [n.lower() for n in names]
     assert "Binaries/xinput9_1_0.dll" in names, "no proxy DLL"
     assert "NMS.rs/nms-rs.exe" in names, "no nms-rs.exe"
+    assert f"NMS.rs/{release.ASI_FILE}" in names, "no NMS.rs/nms_rs.asi for Setup"
     assert "README.txt" in names, "no README"
     py = [n for n in names if n.lower().endswith(".py")]
     assert not py, f"unexpected .py: {py}"

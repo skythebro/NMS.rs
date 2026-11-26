@@ -169,6 +169,12 @@ def rust_files(version: str) -> dict[str, Path]:
         if not path.is_file():
             raise SystemExit(f"Missing {path}. Build it first: py -3 release.py rust-build --version {version}")
     files: dict[str, Path] = {"Binaries/xinput9_1_0.dll": dll, "NMS.rs/nms-rs.exe": exe}
+    # Not in Binaries: Setup installs it only when Binaries\xinput9_1_0.dll is an ASI loader.
+    asi = PROXY_VARIANT_DIR / ASI_FILE
+    if not asi.is_file():
+        raise SystemExit(f"Missing {asi}. Build it first: py -3 release.py rust-build --version {version}")
+    check_asi_exports(asi)
+    files[f"NMS.rs/{ASI_FILE}"] = asi
     versions: dict[str, str] = {}
     for name in RUST_STOCK_MODS:
         sources = _sources(MODS_SRC / name)
