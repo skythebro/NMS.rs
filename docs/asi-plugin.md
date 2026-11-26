@@ -137,8 +137,9 @@ the common path.
 - New optional Nexus file `NMS.rs-<v>-asi.zip`: `Binaries\nms_rs.asi`, the same file as
   `NMS.rs\nms_rs.asi` (so `nms-rs install` can update or reinstall it) and a README (install the
   main zip but keep the ASI loader's xinput9_1_0.dll; no NMS.rs winmm/version next to it).
-- Open question for Bryan: also ship `NMS.rs\nms_rs.asi` inside the main zip (about 2 MB), so
-  Setup can install the .asi with no extra download. The main zip still contains
+- Decided (Bryan, 2026-11-26): the main zip also ships `NMS.rs\nms_rs.asi` (1.6 MB), so Setup
+  can install the .asi with no extra download (`dev/test_release_rust.py` checks it). The main
+  zip still contains
   `Binaries\xinput9_1_0.dll`, which overwrites UAL if the player extracts everything; that
   problem is the same one Snap Angles users have today and is not solved here.
 
