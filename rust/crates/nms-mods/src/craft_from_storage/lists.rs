@@ -14,7 +14,7 @@ pub const PRODUCT_CATEGORY: usize = 0x1E8;
 pub const POPUP_VECTOR_MAX: u32 = 16;
 pub const POPUP_MODES: [i32; 2] = [0x47, 0x67];
 pub const FEED_MODE: i32 = 0x41;
-pub const VIEW_OFFSET: u64 = 0xC240;
+pub const VIEW_OFFSET: u64 = 0xC280;
 pub const STORE_NAME_AT: usize = 0x104;
 // Build 183791: page fields moved (0x14CE0 -> 0x14D20, 0x14CD8 -> 0x14D18, 0x19650 -> 0x196B0).
 pub const QUICK_STATE_AT: usize = 0x14D20;

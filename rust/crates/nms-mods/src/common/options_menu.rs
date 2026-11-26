@@ -1102,7 +1102,7 @@ fn release_input_if_due() {
 const TEXT_KEYBOARD_FLAG_OFFSET: usize = 0xAF4;
 /// Offset of the text manager inside the application object (build 183791: `app+0x880CFC` is its
 /// `+0xAF4` and `app+0x880878` its `+0x670`, read at `0x14074EEA9`; `0x859970` before).
-const TEXT_MGR_OFFSET: usize = 0x880208;
+const TEXT_MGR_OFFSET: usize = 0x8802C8;
 /// The real text manager (the game also runs `Update` on a second, unrelated instance).
 fn real_mgr() -> Option<usize> {
     super::context::data(APP_GLOBAL.load(Ordering::Acquire)).map(|app| app + TEXT_MGR_OFFSET)

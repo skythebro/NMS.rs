@@ -13,9 +13,9 @@ pub const SHOP_LIST: &str = "48 8D 15 ? ? ? ? 41 B9 06 00 00 00 49 8B CD E8 ? ? 
 49 8D 9D D8 43 01 00";
 pub const SHOP_PAGE: &str = "48 89 5C 24 08 48 89 6C 24 10 4C 89 44 24 18 56 57 41 56 \
 48 83 EC 40 65 48 8B 04 25 58 00 00 00";
-pub const SHOP_WALLET: &str = "48 8B 05 ? ? ? ? 48 05 70 0E 00 00 C3";
+pub const SHOP_WALLET: &str = "48 8B 05 ? ? ? ? 48 05 B0 0E 00 00 C3";
 pub const SHOP_HAS_INV: &str = "48 83 EC 28 48 81 C1 00 09 00 00 41 B8 FF FF FF FF E8";
-pub const SHOP_HAS_GLOBAL: &str = "48 8B 0D ? ? ? ? 33 D2 45 8B 67 0C 48 81 C1 40 B9 00 00 33 DB E8";
+pub const SHOP_HAS_GLOBAL: &str = "48 8B 0D ? ? ? ? 33 D2 45 8B 67 0C 48 81 C1 80 B9 00 00 33 DB E8";
 pub const SHOP_INV_CLEAR: &str = "40 57 48 83 EC 20 48 83 79 20 00 48 8B F9 74 40";
 pub const SHOP_CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 84 4C 01 00 00";
 pub const SHOP_TOGGLE: &str = "48 8B 0D ? ? ? ? 41 B9 FF FF FF FF 41 B8 01 00 00 00 \

@@ -765,8 +765,17 @@ impl Manager {
         }
         let (tx, rx) = mpsc::channel();
         let root = self.root.clone();
+        // Mod and size changes merge the UI scripts at once, so the next game start loads them.
+        let merge = matches!(area, Area::Mods | Area::Sizes);
         std::thread::spawn(move || {
-            let _ = tx.send(work(&root));
+            let mut result = work(&root);
+            if merge && result.is_ok() && !files::game_is_running() {
+                let problems = crate::play::merge_now(&root);
+                if !problems.is_empty() {
+                    result = result.map(|done| format!("{done} {}", problems.join(" ")));
+                }
+            }
+            let _ = tx.send(result);
         });
         self.job = Some(Job {
             area,

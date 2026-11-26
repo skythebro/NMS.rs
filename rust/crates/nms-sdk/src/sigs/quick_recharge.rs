@@ -8,7 +8,7 @@ pub const TRIGGER: &str = "44 88 44 24 ? 48 89 4C 24 ? 55 53 56 57 41 54 41 57";
 pub const CHARGE1: &str = "48 89 5C 24 10 48 89 6C 24 18 56 57 41 57 48 81 EC 90 00 00 00 44 8B D2";
 /// ChargeMenu site: mov edx,[rsi+0x40] / lea r8,[rsi+0x44] / lea rcx,[rax+0xAAD0].
 pub const CHARGE_SITE: &str = "8B 56 40 4C 8D 46 44 48 8D 88 D0 AA 00 00";
-pub const WALLET: &str = "48 8B 05 ? ? ? ? 48 05 70 0E 00 00 C3";
+pub const WALLET: &str = "48 8B 05 ? ? ? ? 48 05 B0 0E 00 00 C3";
 /// Vanilla charge sound: PostEvent wrapper.
 pub const POST: &str = "48 83 EC 48 33 C9 4C 8B D2 89 4C 24 38 49 8B C0 48 89 4C 24 30 45 33 C9 89 4C 24 28 45 33 C0 48 89 4C 24 20 48 8B D0 41 8B 4A 08";
 /// Start of TriggerAction: mov rdi,[rip+G] / ... / mov rdi,[rdi+disp].
@@ -24,7 +24,7 @@ pub const LOOP: &str = "48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8B 54 24 40 4C 8D 4E 18 4
 pub const DTOR: &str = "40 53 48 83 EC 20 83 79 04 00 48 8B D9 76 07 C7 41 04 00 00 00 00 48 8B 51 08 48 85 D2 74 1F 41 B8 FF FF FF";
 /// Quick Menu name lookup for an item (product, substance, tech, GetText).
 pub const NAME: &str = "40 53 48 83 EC 20 80 79 08 00 48 8B D9 74 06 48 83 C3 10 EB 2B 48 8B 0D ? ? ? ? \
-41 B8 FF FF FF FF 8B 53 40 48 81 C1 40 C2 00 00 E8 ? ? ? ? 48 8D 53 44 48 8B C8 E8 ? ? ? ? \
+41 B8 FF FF FF FF 8B 53 40 48 81 C1 80 C2 00 00 E8 ? ? ? ? 48 8D 53 44 48 8B C8 E8 ? ? ? ? \
 48 8B D8 48 89 7C 24 30 48 85 DB 0F 84 ? ? ? ? 48 8B 0D ? ? ? ? 41 B0 01 48 83 C1 60 \
 48 8B D3 E8 ? ? ? ? 48 8B F8 48 85 C0 74 21 E8 ? ? ? ?";
 /// Corner notice: AddTimedMessage plus cleanup (same site as Quick Transfer All).

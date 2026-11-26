@@ -47,7 +47,7 @@ pub const COMP_GET: &str = "40 53 48 83 EC 20 4C 63 C9 48 8B DA 48 85 D2 74 49";
 /// component type word (`[unit+8]` is the component table). The application sub-object moved from
 /// `0x859090` to `0x87F920` in build 183791. 1 hit.
 pub const REFINER_ANCHOR: &str =
-    "48 8B 0D ? ? ? ? 48 8B D7 48 81 C1 20 F9 87 00 E8 ? ? ? ? 0F BF 0D ? ? ? ? 48 8B 57 08";
+    "48 8B 0D ? ? ? ? 48 8B D7 48 81 C1 E0 F9 87 00 E8 ? ? ? ? 0F BF 0D ? ? ? ? 48 8B 57 08";
 /// Offset of the application global's `disp32` (instruction ends 4 bytes later).
 pub const ANCHOR_APP_DISP: usize = 3;
 /// Offset of the refiner type word's `disp32` (instruction ends 4 bytes later).
@@ -55,7 +55,7 @@ pub const ANCHOR_TYPE_DISP: usize = 25;
 
 /// The game's own refusal notice for a running refiner, inside `RefinerRefund` `0x1410D7FB0` at
 /// `0x1410D7FDE`:`mov rdi,[rip+app]` .. translate `REFINER_CANNOT_PICK_UP` .. `movss xmm2,[rip+1.0]`
-/// .. `lea r9,[rip+colour]` .. `lea rcx,[rdi+0x86E3D0]; mov [rsp+0x20], audio; call AddTimedMessage;
+/// .. `lea r9,[rip+colour]` .. `lea rcx,[rdi+0x86E470]; mov [rsp+0x20], audio; call AddTimedMessage;
 /// lea rcx,[rsp+0xD0]; call release`. That is the whole vanilla refusal: an on-screen message (not modal)
 /// and `return 0`. RefinerGuard repeats exactly this call with its own text. 1 hit.
 pub const REFUSAL_NOTICE: &str = "48 8B 3D ? ? ? ? 49 8D 4B 08 45 89 73 08 0F B6 98 54 04 00 00 E8 ? ? ? ? E8 ? ? ? ? 48 8D 0D ? ? ? ? 84 DB 48 8D 15 ? ? ? ? 48 0F 45 D1 45 33 C0 48 8B C8 E8 ? ? ? ? F3 0F 10 15 ? ? ? ? 48 8D 8C 24 D0 00 00 00 44 88 74 24 50 4C 8D 0D ? ? ? ? 44 88 74 24 48 0F 57 C0 44 88 74 24 40 48 8B D0 F3 0F 11 44 24 38 48 89 4C 24 28 48 8D 8F ? ? ? ? C7 44 24 20 ? ? ? ? E8 ? ? ? ? 48 8D 8C 24 D0 00 00 00 E8 ? ? ? ?";

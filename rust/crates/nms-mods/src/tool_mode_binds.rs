@@ -2,9 +2,9 @@
 //! "Change Secondary Weapon" submenu, and so Ctrl+digit binds for them.
 //!
 //! The multi-tool has a primary slot (`[W+0xF74]`) and a secondary slot (`[W+0xF78]`). The submenu lists only
-//! modes whose bit is set in the secondary mask `G+0xE68`; the three tools are primaries. Two code sites:
+//! modes whose bit is set in the secondary mask `G+MASK_OFFSET`; the three tools are primaries. Two code sites:
 //!
-//! 1. Row filter (`FILTER_LOOP + 13`, 14 bytes `test [rdi+rax*4+0xE68], r14d; je skip`) becomes a jump to a
+//! 1. Row filter (`FILTER_LOOP + 13`, 14 bytes `test [rdi+rax*4+MASK_OFFSET], r14d; je skip`) becomes a jump to a
 //!    cave: a secondary mode goes on exactly as in vanilla; otherwise the mode is let through only when its
 //!    bit is in our extra mask (cave data, written live), and the bit is or-ed into a "seen" word that a
 //!    log thread reports. `eax` and the flags are dead at both exits (the next block reloads them).
@@ -84,7 +84,7 @@ static EXTRA: AtomicU32 = AtomicU32::new(0);
 static LOG_ON: AtomicBool = AtomicBool::new(false);
 static ORIG_SELECT: AtomicUsize = AtomicUsize::new(0);
 static SET_PRIMARY: AtomicUsize = AtomicUsize::new(0);
-/// Address of the game's global pointer `G` (the secondary mask is at `G+0xE68`).
+/// Address of the game's global pointer `G` (the secondary mask is at `G+MASK_OFFSET`).
 static G_GLOBAL: AtomicUsize = AtomicUsize::new(0);
 static LOG: OnceLock<Arc<Log>> = OnceLock::new();
 
@@ -190,8 +190,9 @@ fn rel(end: usize, target: usize) -> Result<[u8; 4], String> {
 /// The filter cave at `cave`. `join` is the instruction after the filter, `skip` the loop tail.
 fn filter_cave(cave: usize, join: usize, skip: usize) -> Result<Vec<u8>, String> {
     let mut c = Vec::with_capacity(48);
-    // mov eax, [rdi+rax*4+0xE68]
-    c.extend_from_slice(&[0x8B, 0x84, 0x87, 0x68, 0x0E, 0x00, 0x00]);
+    // mov eax, [rdi+rax*4+MASK_OFFSET]
+    c.extend_from_slice(&[0x8B, 0x84, 0x87]);
+    c.extend_from_slice(&(sigs::MASK_OFFSET as u32).to_le_bytes());
     // test eax, r14d
     c.extend_from_slice(&[0x44, 0x85, 0xF0]);
     // jne join (a secondary: vanilla row)
@@ -684,7 +685,7 @@ mod tests {
         let cave = 0x1_3000_0000usize;
         let (join, skip) = (0x1_4155_9E6Busize, 0x1_4155_9F43usize);
         let c = filter_cave(cave, join, skip).unwrap();
-        assert_eq!(&c[..10], &[0x8B, 0x84, 0x87, 0x68, 0x0E, 0x00, 0x00, 0x44, 0x85, 0xF0]);
+        assert_eq!(&c[..10], &[0x8B, 0x84, 0x87, 0xA8, 0x0E, 0x00, 0x00, 0x44, 0x85, 0xF0]);
         assert_eq!(&c[10..12], &[0x0F, 0x85]);
         assert_eq!(target(&c, 12, cave), join);
         assert_eq!(&c[16..19], &[0x44, 0x85, 0x35]);
@@ -738,14 +739,14 @@ mod tests {
         let Some(exe) = exe else { return };
         let image = nms_core::FileImage::load(&exe).unwrap();
         let at = locate(&image).unwrap();
-        // Exe of 89,540,680 bytes, build 185034.
-        assert_eq!(at.filter, 0x155E35D);
-        assert_eq!(at.join, 0x155E36B);
-        assert_eq!(at.skip, 0x155E443);
-        assert_eq!(at.global, 0x6F6C288);
-        assert_eq!(at.select, 0x143A0B0);
-        assert_eq!(at.action, 0x156ACAF);
-        assert_eq!(at.set_primary, 0x1434F50);
+        // Exe of 89,563,720 bytes, build 186923.
+        assert_eq!(at.filter, 0x156020D);
+        assert_eq!(at.join, 0x156021B);
+        assert_eq!(at.skip, 0x15602F3);
+        assert_eq!(at.global, 0x6F71768);
+        assert_eq!(at.select, 0x143BFC0);
+        assert_eq!(at.action, 0x156CB5F);
+        assert_eq!(at.set_primary, 0x1436E60);
         let base = 0x1_4000_0000usize;
         let cave = base + 0x7000_0000;
         let body = filter_cave(cave, base + at.join, base + at.skip).unwrap();

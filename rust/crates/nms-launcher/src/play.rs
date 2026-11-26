@@ -163,6 +163,20 @@ pub(crate) fn first_is_nms_exe(first: &str) -> bool {
     Path::new(first).file_name().map(|n| n.to_string_lossy().eq_ignore_ascii_case(GAME_EXE)).unwrap_or(false)
 }
 
+/// Merge the UI scripts now, right after the manager changed mods. The merge at game start runs
+/// while the game loads, and the game can read GAMEDATA\MODS before it is done, so a new side bar
+/// only showed after another start. Done here, the game start finds it up to date. Returns problems.
+pub(crate) fn merge_now(root: &Path) -> Vec<String> {
+    // No game paks (a test folder, not a game install): nothing to merge from.
+    if !root.join("GAMEDATA").join("PCBANKS").is_dir() {
+        return Vec::new();
+    }
+    let mut session = Session::open(root);
+    session.say("NMS.rs manager: UI merge after a mod change");
+    session.merge_ui(root);
+    session.problems
+}
+
 pub(crate) fn cli_prepare(root: &Path) -> ExitCode {
     let mut session = Session::open(root);
     session.prepare(root);
@@ -194,6 +208,16 @@ mod tests {
         assert!(!first_is_nms_exe("steam.exe"));
         assert!(!first_is_nms_exe(r"C:\foo\NMS.exe.bak"));
         assert!(!first_is_nms_exe(""));
+    }
+
+    #[test]
+    fn merge_now_merges_and_logs() {
+        let root = temp_game("merge-now");
+        std::fs::create_dir_all(root.join("GAMEDATA").join("PCBANKS")).unwrap();
+        assert!(merge_now(&root).is_empty());
+        let log = std::fs::read_to_string(paths::loader_dir(&root).join("logs").join("launcher.log")).unwrap();
+        assert!(log.contains("UI merge after a mod change") && log.contains("Checking UI merge."), "{log}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

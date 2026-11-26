@@ -18,7 +18,7 @@ use nms_sdk::sigs::ingame_options as sigs;
 const STATE: usize = 0x670;
 /// Offset of the text manager inside the application object (`0x859970` before build 183791; see
 /// `TEXT_MGR_OFFSET` in `common/options_menu.rs` for where it was read).
-const MGR_OFFSET: usize = 0x880208;
+const MGR_OFFSET: usize = 0x8802C8;
 /// The input controller's action-set group (`ctl+0x1770`, `0x1500` before build 183791).
 const CTL_SETS: usize = sigs::CONTROLLER_SETS as usize;
 /// The longest text the player can type.

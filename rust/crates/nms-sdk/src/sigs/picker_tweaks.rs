@@ -29,9 +29,9 @@ pub const REFINER_MAX: &str = "40 53 48 83 EC 20 48 8D 54 24 38 C7 44 24 38 00 0
 /// `0x1410D7D50(unit, u16 amount)`: the game's own amount setter (clamps, repacks `unit+0x2A0`).
 pub const REFINER_SETTER: &str = "40 53 56 48 83 EC 28 48 89 7C 24 50 33 DB 0F B7 FA";
 /// `0x140EE4A40(app+0x60, id) -> record`: product lookup (pure hash find).
-pub const PRODUCT_LOOKUP: &str = "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B F9 48 8B EA 48 81 C1 C0 03 00 00";
+pub const PRODUCT_LOOKUP: &str = "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B F9 48 8B EA 48 81 C1 00 04 00 00";
 /// `0x140ED6E10(app+0x60, id) -> record`: substance lookup (pure hash find).
-pub const SUBSTANCE_LOOKUP: &str = "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B F9 48 8B EA 48 81 C1 00 03 00 00";
+pub const SUBSTANCE_LOOKUP: &str = "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B F9 48 8B EA 48 81 C1 40 03 00 00";
 /// `0x142C40F80(table, key, 0) -> utf8`: localisation lookup. Copies the key to its own stack,
 /// upper-cases it, finds it in the table; returns the key pointer itself when the id is unknown.
 pub const LOC_LOOKUP: &str = "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 40 0F 57 C0";
@@ -43,7 +43,7 @@ pub const LOC_TABLE: &str = "48 83 EC 28 65 48 8B 04 25 58 00 00 00 B9 48 1D 00 
 /// `0x140EE3C60(app+0x60, id, bool make) -> record`: technology lookup. Called with `make = 0` only:
 /// a pure hash find plus a list walk (with 1 it builds a missing procedural technology). The name
 /// key the technology card draws is at record `+0x50` (`0x1406A490C`).
-pub const TECH_LOOKUP: &str = "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 48 83 EC 30 48 8B F1 41 0F B6 E8 48 81 C1 40 03 00 00";
+pub const TECH_LOOKUP: &str = "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 48 83 EC 30 48 8B F1 41 0F B6 E8 48 81 C1 80 03 00 00";
 
 /// `0x1409172D0(host)`: the frontend page host, once per frame while a menu page is up. Located,
 /// never hooked: the input shield reads three things out of it.
@@ -113,7 +113,7 @@ pub const PLATFORM_SET_LAST: [u8; 6] = [0x89, 0x83, 0x88, 0x03, 0x00, 0x00];
 /// `movss [rbx+0xC], xmm11; movss [rbx+0x10], xmm12` (frontend cursor in the page state).
 ///
 /// Build 183791 removed this check from the builder (`0x140205BCC` goes straight on to the cursor
-/// code; the text manager, now `App+0x880208`, is not read there any more). The pattern is kept as it
+/// code; the text manager, now `App+0x8802C8`, is not read there any more). The pattern is kept as it
 /// was and is expected to be missing: `cursor::locate` then fails and the cursor write-back stays off,
 /// which is what a build without the snap needs. Not re-pointed at anything.
 pub const FRONTEND_TEXT_SNAP: &str = "40 38 B1 64 A4 85 00 74 0D 83 B9 E0 9F 85 00 00 41 0F 95 C7";

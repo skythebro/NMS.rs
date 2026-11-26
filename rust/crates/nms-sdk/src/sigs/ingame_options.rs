@@ -36,14 +36,14 @@ pub const FIND_CHILD: &str = "48 89 5C 24 08 57 48 83 EC 40 48 8B 99 50 01 00 00
 /// shop uses). `cmp byte [rcx+0x14C84], 0` is the page's input byte (`0x14C44` before build 183791).
 pub const CONFIRM: &str = "48 89 6C 24 20 41 54 41 56 41 57 48 83 EC 40 80 B9 84 4C 01 00 00";
 /// Inside `DoGameSwitcher`, at `BUSY_AT`: `mov rcx, [rip+disp32]`; at `BUSY_CHECK_AT`, two
-/// instructions later: `cmp byte [rcx+0x87fd5a], 0` (`0x8594c2` before build 183791). The page skips
+/// instructions later: `cmp byte [rcx+0x87fe1a], 0` (`0x87fd5a` before build 186923, `0x8594c2` before 183791). The page skips
 /// its click tests while that byte is set (a popup is open); so do we.
 /// Build 185034: `0x2CB` / `0x2EA` (`0xCCF` / `0xCEE` before).
 pub const BUSY_AT: usize = 0x2CB;
 pub const BUSY_CHECK_AT: usize = 0x2EA;
 pub const BUSY_CODE: [u8; 3] = [0x48, 0x8B, 0x0D];
-pub const BUSY_CHECK: [u8; 7] = [0x80, 0xB9, 0x5A, 0xFD, 0x87, 0x00, 0x00];
-pub const BUSY_OFFSET: usize = 0x87FD5A;
+pub const BUSY_CHECK: [u8; 7] = [0x80, 0xB9, 0x1A, 0xFE, 0x87, 0x00, 0x00];
+pub const BUSY_OFFSET: usize = 0x87FE1A;
 /// Offset of the pause page's element table, the first argument of the name lookup.
 pub const TABLE_OFFSET: usize = 0x14478;
 
@@ -70,7 +70,7 @@ pub const CONTROLLER_SETS: u32 = 0x1770;
 /// the text box with B also reached this and left the page, so it is refused while our box is open.
 /// `0x1406F6470` on build 184271; reads the app field `+0x89BEA8` (`0x89BD98` on 183791, `0x875498`
 /// before).
-pub const OPTIONS_BACK: &str = "48 89 5C 24 08 57 48 83 EC 20 48 8B 1D ? ? ? ? 0F B6 F9 8B 83 A8 BE 89 00 85 C0 74 0E";
+pub const OPTIONS_BACK: &str = "48 89 5C 24 08 57 48 83 EC 20 48 8B 1D ? ? ? ? 0F B6 F9 8B 83 68 BF 89 00 85 C0 74 0E";
 
 /// In `BOOLEAN` at this byte: `mov rdx,rsi; lea rcx,[rsp+0x40]; call <row helper>` (the page in rdx).
 pub const BOOLEAN_ROW_CALL_AT: usize = 0x7F;

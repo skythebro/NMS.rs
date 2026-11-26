@@ -259,7 +259,7 @@ impl ShopInv {
     }
 
     fn root(&self) -> u64 {
-        read_u64(self.global_at).unwrap_or(0).wrapping_add(0xB940)
+        read_u64(self.global_at).unwrap_or(0).wrapping_add(0xB980)
     }
 
     pub fn switch_has(&self, kind: u32) -> bool {

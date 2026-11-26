@@ -47,16 +47,17 @@ pub const FILTER: &str = "41 8B 44 24 24 32 DB 44 8B B7 ? ? ? ? 85 C0 75 11 41 8
 /// Patch head `NOTIFY_PATCH_BYTES`; new bytes are `E9` rel32 to a cave (runtime).
 pub const NOTIFY_PATCH: &str = "44 8B 7C 24 74 4C 8B A5 98 04 00 00";
 pub const NOTIFY_TOAST: &str = "48 8B 1D ? ? ? ? 48 8D 4C 24 78 C7 44 24 78 00 00 00 00";
-/// Save id copy: source `CommonState+0x8C10` (was `0x8980`), dest `PlayerState+0x187E8`.
-pub const SAVE_ID: &str = "49 8B ? 10 8C 00 00 49 89 ? E8 87 01 00";
+/// Save id copy: source `CommonState+0x8C30` (`0x8C10` before build 186923, `0x8980` before that),
+/// dest `PlayerState+0x187E8`. The source register needs a SIB byte (r12) since 186923.
+pub const SAVE_ID: &str = "49 8B ? 24 30 8C 00 00 49 89 ? E8 87 01 00";
 /// `SELL_TOAST_AT`: toggles five-byte `E8` call to NOP (original rel32 captured at runtime).
 /// The `BIG_SELLER` block; the three blocks after it (`SMUGGLE_VALUE`, `FISH_CASH`, `BONE_CASH`)
 /// differ only by `rbp+0x3B0/0x3C0/0x3D0`, so the frame offset must stay concrete.
-pub const SELL_TOAST: &str = "45 33 C9 4C 89 6C 24 20 45 8B C4 48 8D 95 A0 03 00 00 48 8D 8B C8 6A 30 00 E8";
+pub const SELL_TOAST: &str = "45 33 C9 4C 89 6C 24 20 45 8B C4 48 8D 95 A0 03 00 00 48 8D 8B E8 6A 30 00 E8";
 /// `SELL_VOICE_AT`: toggles five-byte `E8` call to NOP (original rel32 captured at runtime).
 pub const SELL_VOICE: &str = "48 8D 54 24 70 66 0F 7F 44 24 70 48 8B CF E8";
 pub const VIEW: &str = "89 54 24 10 48 83 EC 28 48 8B 01 4C 8B 08 49 63 81 18 0B 00 00 83 F8 FF 74 36 4C 8B D0";
-pub const WALLET: &str = "48 8B 05 ? ? ? ? 48 05 70 0E 00 00 C3";
+pub const WALLET: &str = "48 8B 05 ? ? ? ? 48 05 B0 0E 00 00 C3";
 
 /// nmspy `cGcFrontendPageFunctions.DoInventorySlots` (before/after hooks).
 pub const NMSPY_DO_INVENTORY_SLOTS: &str = "48 85 D2 0F 84 ? ? ? ? 48 8B C4 4C 89 48 ? 4C 89 40";

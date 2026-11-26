@@ -21,8 +21,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import release  # noqa: E402
 
-if not (release.RUST_TARGET / "nms-rs.exe").is_file():
-    release.RUST_TARGET = release._target_dir() / "release"
+# The zip is made from <target>\dist (release.py rust-build) or, when that is missing or older than
+# the dev build (cargo build --release), from <target>\release.
+_dist, _dev = release.RUST_TARGET / "nms-rs.exe", release._target_dir() / "release" / "nms-rs.exe"
+if not _dist.is_file() or (_dev.is_file() and _dev.stat().st_mtime > _dist.stat().st_mtime):
+    release.RUST_TARGET = _dev.parent
     release.PROXY_VARIANT_DIR = release.RUST_TARGET / "variants"
 
 

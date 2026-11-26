@@ -710,7 +710,7 @@ mod tests {
             assert_eq!(f.type_word, 0x517F8D0);
             assert_eq!(f.notice.add, 0x9D3FA0);
             assert_eq!(f.notice.release, 0x2DD6870);
-            assert_eq!(f.notice.object, 0x86E3D0);
+            assert_eq!(f.notice.object, 0x86E470);
             assert_eq!(f.notice.audio, 0x75AC6211);
             assert_eq!(f.notice.duration, 1.0);
         }

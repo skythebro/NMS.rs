@@ -47,6 +47,18 @@ mod store;
 mod tools;
 mod ui;
 
+/// `nms-rs mods <word>` commands that change GAMEDATA\MODS.
+const CHANGES_MODS: [&str; 7] = ["park", "unpark", "park-all", "install", "update", "install-all", "update-all"];
+
+/// After a command that changed mods, merge the UI scripts now (see `play::merge_now`).
+fn merge_after(root: &Path, changed: bool, result: Result<String, String>) -> Result<String, String> {
+    if changed && result.is_ok() && !files::game_is_running() {
+        // Problems are printed (and logged) as they happen.
+        let _ = play::merge_now(root);
+    }
+    result
+}
+
 fn game_root() -> Option<PathBuf> {
     let from_exe = std::env::current_exe().ok().and_then(|e| e.parent().and_then(paths::find_game_root));
     from_exe.or_else(|| std::env::current_dir().ok().and_then(|d| paths::find_game_root(&d)))
@@ -232,8 +244,8 @@ fn main() -> ExitCode {
         }
         (["setup", rest @ ..], _) => return setup::cli(rest),
         (["steam-option", rest @ ..], _) => steam::cli(rest),
-        (["mods", rest @ ..], Some(r)) => crate::mods::cli(r, rest),
-        (["sizes", rest @ ..], Some(r)) => crate::sizes::apply::cli(r, rest),
+        (["mods", rest @ ..], Some(r)) => merge_after(r, rest.first().is_some_and(|w| CHANGES_MODS.contains(w)), crate::mods::cli(r, rest)),
+        (["sizes", rest @ ..], Some(r)) => merge_after(r, rest.first() == Some(&"apply"), crate::sizes::apply::cli(r, rest)),
         (["migrate", rest @ ..], Some(r)) => return migrate::cli(r, rest),
         _ => Err("usage: nms-rs [manager] | install [--force] [--as winmm|version|xinput9_1_0] | uninstall | disable | enable | status | set <mod> <key> <value> | play [<game command>...] | prepare | pack-logs | conflicts | merge --plan | setup [--yes] [--no-shortcut] [--force] | steam-option status | set | remove [--yes] | mods park|unpark|install|update <name> | park-all | install-all | update-all | cleanup-python | strip-launch | status | sizes apply --columns N --rows auto|N --window F --slots P [--no-filters] | migrate [--yes]".into()),
     };
