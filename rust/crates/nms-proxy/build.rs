@@ -3,16 +3,19 @@
 //!
 //! With `as-winmm` or `as-version` the DLL is built for that name: one jump stub per export of the
 //! System32 DLL (`exports\<name>.txt`), exported under the same name and ordinal.
+//! With `as-asi` it is an ASI plugin (`nms_rs.asi`) for an ASI loader: no proxy exports at all.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
 /// (Cargo feature, DLL file name). No feature: xinput9_1_0.dll, forwarded by hand in `xinput.rs`.
-const VARIANTS: &[(&str, &str)] = &[("AS_WINMM", "winmm.dll"), ("AS_VERSION", "version.dll")];
+const VARIANTS: &[(&str, &str)] =
+    &[("AS_WINMM", "winmm.dll"), ("AS_VERSION", "version.dll"), ("AS_ASI", "nms_rs.asi")];
 
 fn main() {
     println!("cargo:rerun-if-env-changed=NMS_RS_VERSION");
     println!("cargo:rustc-check-cfg=cfg(nms_proxy_forward)");
+    println!("cargo:rustc-check-cfg=cfg(nms_proxy_asi)");
     let picked: Vec<&str> = VARIANTS
         .iter()
         .filter(|(feature, _)| std::env::var_os(format!("CARGO_FEATURE_{feature}")).is_some())
@@ -22,7 +25,10 @@ fn main() {
         panic!("nms-proxy: pick one DLL name feature at a time, not {}", picked.join(" and "));
     }
     let dll = picked.first().copied().unwrap_or("xinput9_1_0.dll");
-    if dll != "xinput9_1_0.dll" {
+    if dll == "nms_rs.asi" {
+        // Loaded by an ASI loader with LoadLibrary: nothing imports it, so it exports nothing.
+        println!("cargo:rustc-cfg=nms_proxy_asi");
+    } else if dll != "xinput9_1_0.dll" {
         println!("cargo:rustc-cfg=nms_proxy_forward");
         forward_stubs(dll);
     }
@@ -71,8 +77,12 @@ fn forward_stubs(dll: &str) {
 fn version_info(dll: &str) {
     #[cfg(windows)]
     {
-        let stem = dll.trim_end_matches(".dll");
-        let kind = if stem == "xinput9_1_0" { "XInput" } else { stem };
+        let stem = dll.trim_end_matches(".dll").trim_end_matches(".asi");
+        let what = match stem {
+            "xinput9_1_0" => "XInput proxy".to_string(),
+            "nms_rs" => "ASI plugin".to_string(),
+            other => format!("{other} proxy"),
+        };
         let version = std::env::var("NMS_RS_VERSION")
             .unwrap_or_else(|_| std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.0.0".into()));
         let mut parts = version.split('.').map(|p| p.parse::<u64>().unwrap_or(0));
@@ -88,7 +98,7 @@ fn version_info(dll: &str) {
         res.set("FileVersion", &version);
         res.set("ProductVersion", &version);
         res.set("ProductName", "NMS.rs");
-        res.set("FileDescription", &format!("NMS.rs mod loader ({kind} proxy) for the NMS game"));
+        res.set("FileDescription", &format!("NMS.rs mod loader ({what}) for the NMS game"));
         res.set("InternalName", stem);
         res.set("OriginalFilename", dll);
         res.set("LegalCopyright", "GPL-3.0-or-later");

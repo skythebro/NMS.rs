@@ -1,6 +1,6 @@
 //! `nms-rs <command>`
 //!
-//!   install [--force] [--as winmm|version|xinput9_1_0]
+//!   install [--force] [--as winmm|version|xinput9_1_0|asi]
 //!                       copy the loader DLL (next to this exe) into <game>\Binaries: by default
 //!                       the name NMS.rs already has there, else xinput9_1_0.dll
 //!   uninstall           remove our loader DLL under every name, never another mod's file
@@ -70,16 +70,34 @@ pub(crate) fn install(root: &Path, force: bool) -> Result<String, String> {
 
 /// Copy `<name>` from next to this exe into `Binaries\`. Never over another mod's file of that name
 /// unless forced. With `--as`, our files under the other names go, so only one loader stays.
+/// `--as asi` (or a plain install when xinput9_1_0.dll is an ASI loader) installs `nms_rs.asi`.
 fn install_as(root: &Path, force: bool, wanted: Option<&str>) -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let here = exe.parent().ok_or("no exe folder")?;
+    install_from(root, here, force, wanted)
+}
+
+fn install_from(root: &Path, here: &Path, force: bool, wanted: Option<&str>) -> Result<String, String> {
     let installed = proxy::installed(root);
+    let asi_installed = proxy::installed_asi(root);
+    let main_is_loader = proxy::is_asi_loader(&proxy::path(root, proxy::MAIN));
+    let as_asi = match wanted {
+        Some(w) => w.eq_ignore_ascii_case("asi") || w.eq_ignore_ascii_case(proxy::ASI),
+        // Keep what is there; with nothing of ours and an ASI loader as xinput9_1_0.dll, the .asi.
+        None => {
+            (installed.is_empty() && !asi_installed.is_empty())
+                || (installed.is_empty() && main_is_loader && here.join(proxy::ASI).is_file())
+        }
+    };
+    if as_asi {
+        return install_asi(root, here, force, &installed, wanted.is_some());
+    }
     let name = match wanted {
         Some(w) => proxy::NAMES
             .iter()
             .copied()
             .find(|n| n.eq_ignore_ascii_case(w) || n.trim_end_matches(".dll").eq_ignore_ascii_case(w))
-            .ok_or_else(|| format!("unknown loader name {w}; use one of {}", proxy::NAMES.join(", ")))?,
+            .ok_or_else(|| format!("unknown loader name {w}; use one of {}, asi", proxy::NAMES.join(", ")))?,
         None => match installed.as_slice() {
             [one] => *one,
             _ => proxy::MAIN,
@@ -94,7 +112,17 @@ fn install_as(root: &Path, force: bool, wanted: Option<&str>) -> Result<String, 
         }
         return Err(format!("{name} not found next to this program"));
     }
+    if proxy::is_asi_build(&src) {
+        return Err(format!("{} is the NMS.rs ASI plugin build; it only works as {}", src.display(), proxy::ASI));
+    }
     if dst.is_file() && !proxy::is_ours(&dst) && !force {
+        if proxy::is_asi_loader(&dst) {
+            return Err(format!(
+                "{} is an ASI loader (Ultimate ASI Loader); not replacing it. Install NMS.rs as an ASI plugin \
+                 instead: nms-rs install --as asi",
+                dst.display()
+            ));
+        }
         // Snap Angles ships an xinput and a winmm version; NMS.rs also comes as winmm.dll and version.dll.
         return Err(format!(
             "{} belongs to another mod; not replacing it (use --force). Keep it and install the NMS.rs \
@@ -112,16 +140,62 @@ fn install_as(root: &Path, force: bool, wanted: Option<&str>) -> Result<String, 
             std::fs::remove_file(&path).map_err(|e| format!("remove failed (is the game running?): {e}"))?;
             lines.push(format!("removed {} (NMS.rs, replaced by {name})", path.display()));
         }
+        for rel in proxy::installed_asi(root) {
+            let path = proxy::path(root, &rel);
+            std::fs::remove_file(&path).map_err(|e| format!("remove failed (is the game running?): {e}"))?;
+            lines.push(format!("removed {} (NMS.rs, replaced by {name})", path.display()));
+        }
     }
-    lines.extend(proxy::twice_warning(&proxy::installed(root)));
+    lines.extend(proxy::twice_warning(&proxy::installed_all(root)));
     Ok(lines.join("\n"))
 }
 
-/// Remove our loader DLL under every name. Another mod's file of the same name stays.
+/// `nms_rs.asi` from next to this exe into the folder the ASI loader reads first
+/// (`proxy::asi_target`). Our DLL loader files go, so only one loader stays.
+fn install_asi(root: &Path, here: &Path, force: bool, installed: &[&str], explicit: bool) -> Result<String, String> {
+    let src = here.join(proxy::ASI);
+    if !src.is_file() {
+        if let (false, Some(rel)) = (explicit, proxy::installed_asi(root).first()) {
+            return Ok(format!("Binaries\\{rel} is NMS.rs as an ASI plugin; left as it is (update it from the NMS.rs ASI file)"));
+        }
+        return Err(format!("{} not found next to this program (get the NMS.rs ASI file)", proxy::ASI));
+    }
+    let loader = proxy::asi_loader(root);
+    if loader.is_none() && !force {
+        return Err("No ASI loader found in Binaries (Ultimate ASI Loader as xinput9_1_0.dll, for example), so \
+                    nms_rs.asi would not load. Install the ASI loader first, or use --force."
+            .into());
+    }
+    let rel = proxy::asi_target(root, loader);
+    let dst = proxy::path(root, &rel);
+    if dst.is_file() && !proxy::is_ours(&dst) && !force {
+        return Err(format!("{} belongs to another mod; not replacing it (use --force)", dst.display()));
+    }
+    if let Some(dir) = dst.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::create_dir_all(paths::loader_dir(root).join("logs")).map_err(|e| e.to_string())?;
+    std::fs::copy(&src, &dst).map_err(|e| format!("copy failed (is the game running?): {e}"))?;
+    let mut lines = vec![match loader {
+        Some(l) => format!("installed {} (ASI plugin, loaded by Binaries\\{l})", dst.display()),
+        None => format!("installed {} (ASI plugin; no ASI loader found yet)", dst.display()),
+    }];
+    for name in installed {
+        let path = proxy::path(root, name);
+        std::fs::remove_file(&path).map_err(|e| format!("remove failed (is the game running?): {e}"))?;
+        lines.push(format!("removed {} (NMS.rs, replaced by {})", path.display(), proxy::ASI));
+    }
+    lines.extend(proxy::twice_warning(&proxy::installed_all(root)));
+    lines.extend(proxy::asi_warnings(root));
+    Ok(lines.join("\n"))
+}
+
+/// Remove our loader under every name, .asi files included. Another mod's file of the same name stays.
 fn uninstall(root: &Path) -> Result<String, String> {
     let mut lines = Vec::new();
-    for name in proxy::NAMES {
-        let path = proxy::path(root, name);
+    let asi = proxy::installed_asi(root);
+    for name in proxy::NAMES.iter().map(|n| n.to_string()).chain(asi) {
+        let path = proxy::path(root, &name);
         if !path.is_file() {
             continue;
         }
@@ -184,7 +258,7 @@ fn install_cli(root: &Path, flags: &[&str]) -> Result<String, String> {
     while let Some(flag) = rest.next() {
         match *flag {
             "--force" => force = true,
-            "--as" => wanted = Some(*rest.next().ok_or("--as needs a name: winmm, version or xinput9_1_0")?),
+            "--as" => wanted = Some(*rest.next().ok_or("--as needs a name: winmm, version, xinput9_1_0 or asi")?),
             other => return Err(format!("unknown install option {other}")),
         }
     }
@@ -247,7 +321,7 @@ fn main() -> ExitCode {
         (["mods", rest @ ..], Some(r)) => merge_after(r, rest.first().is_some_and(|w| CHANGES_MODS.contains(w)), crate::mods::cli(r, rest)),
         (["sizes", rest @ ..], Some(r)) => merge_after(r, rest.first() == Some(&"apply"), crate::sizes::apply::cli(r, rest)),
         (["migrate", rest @ ..], Some(r)) => return migrate::cli(r, rest),
-        _ => Err("usage: nms-rs [manager] | install [--force] [--as winmm|version|xinput9_1_0] | uninstall | disable | enable | status | set <mod> <key> <value> | play [<game command>...] | prepare | pack-logs | conflicts | merge --plan | setup [--yes] [--no-shortcut] [--force] | steam-option status | set | remove [--yes] | mods park|unpark|install|update <name> | park-all | install-all | update-all | cleanup-python | strip-launch | status | sizes apply --columns N --rows auto|N --window F --slots P [--no-filters] | migrate [--yes]".into()),
+        _ => Err("usage: nms-rs [manager] | install [--force] [--as winmm|version|xinput9_1_0|asi] | uninstall | disable | enable | status | set <mod> <key> <value> | play [<game command>...] | prepare | pack-logs | conflicts | merge --plan | setup [--yes] [--no-shortcut] [--force] | steam-option status | set | remove [--yes] | mods park|unpark|install|update <name> | park-all | install-all | update-all | cleanup-python | strip-launch | status | sizes apply --columns N --rows auto|N --window F --slots P [--no-filters] | migrate [--yes]".into()),
     };
     match result {
         Ok(text) => {
@@ -280,6 +354,81 @@ mod tests {
         assert!(proxy::path(&root, "xinput9_1_0.dll").is_file());
         assert!(proxy::installed(&root).is_empty());
         assert!(uninstall(&root).unwrap().starts_with("nothing to remove"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn temp_game(tag: &str) -> (PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!("nms-rs-asi-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Binaries")).unwrap();
+        let here = root.join("NMS.rs");
+        std::fs::create_dir_all(&here).unwrap();
+        std::fs::write(here.join(proxy::ASI), b"MZ NMS.rs proxy marker NMS.rs asi marker").unwrap();
+        std::fs::write(here.join(proxy::MAIN), b"MZ NMS.rs proxy marker").unwrap();
+        (root, here)
+    }
+
+    fn ual() -> Vec<u8> {
+        proxy::tests::fake_pe(&["IsUltimateASILoader", "XInputGetState"])
+    }
+
+    /// Ultimate ASI Loader as xinput9_1_0.dll: a plain install picks the .asi and keeps the loader.
+    #[test]
+    fn plain_install_picks_asi_next_to_an_asi_loader() {
+        let (root, here) = temp_game("plain");
+        std::fs::write(proxy::path(&root, proxy::MAIN), ual()).unwrap();
+        let text = install_from(&root, &here, false, None).unwrap();
+        assert!(text.contains("ASI plugin, loaded by Binaries\\xinput9_1_0.dll"), "{text}");
+        assert!(proxy::is_asi_loader(&proxy::path(&root, proxy::MAIN)), "the ASI loader stays");
+        assert_eq!(proxy::installed_asi(&root), ["nms_rs.asi"]);
+        // Updating keeps it there; without the file next to the exe it is left alone.
+        assert!(install_from(&root, &here, false, None).unwrap().contains("installed"));
+        std::fs::remove_file(here.join(proxy::ASI)).unwrap();
+        assert!(install_from(&root, &here, false, None).unwrap().contains("left as it is"));
+        // --as xinput9_1_0 would replace the ASI loader: refused, and the message names --as asi.
+        let err = install_from(&root, &here, false, Some("xinput9_1_0")).unwrap_err();
+        assert!(err.contains("--as asi"), "{err}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn as_asi_needs_a_loader_and_replaces_our_dlls() {
+        let (root, here) = temp_game("explicit");
+        std::fs::write(proxy::path(&root, "winmm.dll"), b"MZ NMS.rs proxy marker").unwrap();
+        let err = install_from(&root, &here, false, Some("asi")).unwrap_err();
+        assert!(err.contains("No ASI loader"), "{err}");
+        std::fs::write(proxy::path(&root, "dinput8.dll"), ual()).unwrap();
+        let text = install_from(&root, &here, false, Some("asi")).unwrap();
+        assert!(text.contains("removed") && text.contains("winmm.dll"), "{text}");
+        assert!(proxy::installed(&root).is_empty());
+        assert_eq!(proxy::installed_asi(&root), ["nms_rs.asi"]);
+        // Back to a DLL: the .asi goes.
+        let text = install_from(&root, &here, false, Some("xinput9_1_0")).unwrap();
+        assert!(text.contains("removed") && text.contains("nms_rs.asi"), "{text}");
+        assert!(proxy::installed_asi(&root).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn asi_build_never_goes_under_a_dll_name() {
+        let (root, here) = temp_game("asidll");
+        std::fs::copy(here.join(proxy::ASI), here.join(proxy::MAIN)).unwrap();
+        let err = install_from(&root, &here, false, None).unwrap_err();
+        assert!(err.contains("only works as nms_rs.asi"), "{err}");
+        assert!(!proxy::path(&root, proxy::MAIN).exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn uninstall_removes_our_asi() {
+        let (root, _here) = temp_game("uninstall");
+        std::fs::create_dir_all(root.join("Binaries").join("scripts")).unwrap();
+        std::fs::write(proxy::path(&root, "scripts\\nms_rs.asi"), b"NMS.rs proxy marker").unwrap();
+        std::fs::write(proxy::path(&root, "scripts\\Other.asi"), b"other").unwrap();
+        let text = uninstall(&root).unwrap();
+        assert!(text.contains("nms_rs.asi"), "{text}");
+        assert!(proxy::path(&root, "scripts\\Other.asi").is_file());
+        assert!(proxy::installed_asi(&root).is_empty());
         let _ = std::fs::remove_dir_all(&root);
     }
 

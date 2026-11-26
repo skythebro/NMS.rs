@@ -269,8 +269,8 @@ struct Manager {
     sizes_open: bool,
     /// The live Smaller Inventory Slots side bar predates the Foods and Custom buttons.
     side_bar_old: bool,
-    /// Names under which an NMS.rs loader DLL sits in Binaries (`proxy::installed`).
-    loaders: Vec<&'static str>,
+    /// NMS.rs loader files in Binaries, DLL names and .asi paths (`proxy::installed_all`).
+    loaders: Vec<String>,
     /// This program's folder when it is not `<game>\\NMS.rs` (zip extracted in the wrong place).
     misplaced: Option<PathBuf>,
     /// What is left of an old NMS.py (version 3) setup; `None` until the first check is back.
@@ -360,7 +360,7 @@ impl Manager {
         }
         let rows = rows_from_disk(&root);
         let side_bar_old = mods::side_bar_outdated(&root);
-        let loaders = proxy::installed(&root);
+        let loaders = proxy::installed_all(&root);
         let misplaced = crate::files::misplaced_here(&root);
         let sizes = load_size_fields(&root);
         let prefs = mset::load(&root);
@@ -946,10 +946,9 @@ impl Manager {
         if !self.wine {
             return;
         }
-        let name = match self.loaders.as_slice() {
-            [one] => *one,
-            _ => proxy::MAIN,
-        };
+        // With our .asi the override is for the ASI loader's DLL (the .asi is loaded by full path).
+        let dll = proxy::wine_dll(&self.root, &self.loaders);
+        let name = dll.as_str();
         let option = proxy::wine_launch_option(name);
         panel_frame().fill(pal::NOTICE_FILL).stroke(egui::Stroke::new(st::STROKE, pal::ATTENTION.gamma_multiply(0.6))).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -973,7 +972,7 @@ impl Manager {
     fn refresh(&mut self) {
         self.rows = rows_from_disk(&self.root);
         self.side_bar_old = mods::side_bar_outdated(&self.root);
-        self.loaders = proxy::installed(&self.root);
+        self.loaders = proxy::installed_all(&self.root);
     }
 
     /// Two NMS.rs loader files in Binaries (say xinput9_1_0.dll and winmm.dll): only the first to

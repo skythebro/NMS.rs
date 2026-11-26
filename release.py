@@ -5,6 +5,7 @@
     py -3 release.py rust --version 4.0.0 --out DIR   write NMS.rs-<version>.zip and its .sha256 into DIR,
                                                       plus NMS.rs-<version>-winmm.zip and -version.zip
                                                       (Nexus "DLL only" files, see PROXY_VARIANTS)
+                                                      and NMS.rs-<version>-asi.zip (ASI_FILE)
     py -3 release.py proxy-exports                    rewrite rust/crates/nms-proxy/exports/*.txt from
                                                       this PC's System32 (dev only)
 
@@ -56,6 +57,11 @@ PROXY_VARIANT_DIR = RUST_TARGET / "variants"
 PROXY_EXPORTS = RUST / "crates" / "nms-proxy" / "exports"
 # Our own exports on top of the System32 ones (DllMain, the install marker, nms-core's detour entry).
 PROXY_OWN_EXPORTS = {"DllMain", "NMS_RS_PROXY_MARKER", "nms_rs_detour_call_v1", "nms_rs_detour_entry_v1"}
+# The loader as an ASI plugin for players whose xinput9_1_0.dll is an ASI loader (docs/asi-plugin.md).
+# No proxy exports; NMS_RS_ASI_MARKER tells the manager never to put it under a DLL name.
+ASI_FILE = "nms_rs.asi"
+ASI_FEATURE = "as-asi"
+ASI_EXPORTS = PROXY_OWN_EXPORTS | {"NMS_RS_ASI_MARKER"}
 
 # Every folder the manager installs from (NMS.rs/stock/<Mod>). Mods with only Rust code still get a
 # stock.json entry so the manager knows their version. NMSrsMenu is lua only (the pause-menu row of
@@ -112,6 +118,22 @@ VARIANT_README = (
     "To remove it, delete Binaries\\{dll}.\n"
     "\nLinux / Proton (beta): the launch option for this file is\n"
     "WINEDLLOVERRIDES=\"{stem}=n,b\" %command%\n"
+)
+# README of the ASI zip (not released yet, docs/asi-plugin.md).
+ASI_README = (
+    "NMS.rs {version}: loader as an ASI plugin, Binaries\\nms_rs.asi\n\n"
+    "This file is only for players whose Binaries\\xinput9_1_0.dll is an ASI loader (Ultimate ASI\n"
+    "Loader, used by Imperial Galactic Map and others). The ASI loader loads nms_rs.asi, and\n"
+    "nms_rs.asi loads the NMS.rs mods.\n\n"
+    "1. Install the main NMS.rs {version} zip first, but keep the ASI loader's\n"
+    "   Binaries\\xinput9_1_0.dll (do not let the main zip replace it).\n"
+    "2. Extract this zip into the game folder: Binaries\\nms_rs.asi lands next to NMS.exe, and a\n"
+    "   copy goes to NMS.rs\\nms_rs.asi so the manager can reinstall it.\n"
+    "3. If the ASI loader's ini sets LoadFromScriptsOnly=1, move it to Binaries\\scripts\\.\n"
+    "4. Keep only one NMS.rs loader file: no NMS.rs winmm.dll or version.dll next to it.\n\n"
+    "To remove it, delete Binaries\\nms_rs.asi.\n"
+    "\nLinux / Proton (beta): the launch option is the ASI loader's, for example\n"
+    "WINEDLLOVERRIDES=\"xinput9_1_0=n,b\" %command%\n"
 )
 
 
@@ -225,7 +247,25 @@ def make_variant_zips(version: str, out: Path) -> list[Path]:
         _zip(path, {f"Binaries/{dll}": source, "README.txt": readme})
         _write_sha256(path)
         made.append(path)
+    source = PROXY_VARIANT_DIR / ASI_FILE
+    if not source.is_file():
+        raise SystemExit(f"Missing {source}. Build it first: py -3 release.py rust-build --version {version}")
+    check_asi_exports(source)
+    readme = BUILD / "README-asi.txt"
+    readme.write_text(ASI_README.format(version=version), encoding="utf-8")
+    path = out / f"NMS.rs-{version}-asi.zip"
+    _zip(path, {f"Binaries/{ASI_FILE}": source, f"NMS.rs/{ASI_FILE}": source, "README.txt": readme})
+    _write_sha256(path)
+    made.append(path)
     return made
+
+
+def check_asi_exports(built: Path) -> None:
+    """The ASI build exports our own functions and markers only: nothing imports it by name."""
+    names = {name for _, name in pe_exports(built) if name}
+    if names != ASI_EXPORTS:
+        raise SystemExit(f"{built.name}: exports {sorted(names)}, want {sorted(ASI_EXPORTS)}")
+    print(f"exports ok: {ASI_FILE} ({len(names)})")
 
 
 def pe_exports(path: Path) -> list[tuple[int, str | None]]:
@@ -335,6 +375,12 @@ def rust_build(version: str) -> None:
         (PROXY_VARIANT_DIR / dll).write_bytes((RUST_TARGET / PROXY_DLL).read_bytes())
         check_proxy_exports(PROXY_VARIANT_DIR / dll, dll)
     subprocess.run(
+        ["cargo", "build", "--profile", "dist", "-p", "nms-proxy", "--features", ASI_FEATURE],
+        cwd=RUST, env=env, check=True,
+    )
+    (PROXY_VARIANT_DIR / ASI_FILE).write_bytes((RUST_TARGET / PROXY_DLL).read_bytes())
+    check_asi_exports(PROXY_VARIANT_DIR / ASI_FILE)
+    subprocess.run(
         ["cargo", "build", "--profile", "dist", "-p", "nms-launcher", "-p", "nms-proxy"],
         cwd=RUST, env=env, check=True,
     )
@@ -347,7 +393,7 @@ def rust_build(version: str) -> None:
 
 
 def _shipped_binaries() -> list[Path]:
-    return [RUST_TARGET / "nms-rs.exe", RUST_TARGET / PROXY_DLL] + [PROXY_VARIANT_DIR / dll for dll in PROXY_VARIANTS]
+    return [RUST_TARGET / "nms-rs.exe", RUST_TARGET / PROXY_DLL] + [PROXY_VARIANT_DIR / dll for dll in PROXY_VARIANTS] + [PROXY_VARIANT_DIR / ASI_FILE]
 
 
 def rust_path_leaks() -> list[str]:

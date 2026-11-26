@@ -31,4 +31,6 @@ selftest = []
 # xinput9_1_0.dll and `release.py rust-build` renames it. Exports: `exports\<name>.txt`.
 as-winmm = []
 as-version = []
+# ASI plugin `nms_rs.asi` for an ASI loader (no proxy exports). Also written as xinput9_1_0.dll.
+as-asi = []
 

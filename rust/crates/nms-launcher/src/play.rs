@@ -42,13 +42,16 @@ impl Session {
     fn prepare(&mut self, root: &Path) {
         self.say("NMS.rs loader: prepare");
         self.say(&crate::files::game_build_line(root));
-        let loaders = crate::proxy::installed(root);
+        let loaders = crate::proxy::installed_all(root);
         if loaders.is_empty() {
             self.say("The Rust mods are not installed. Run nms-rs install while the game is closed.");
         } else {
             self.say(&format!("NMS.rs loader file: Binaries\\{}", loaders.join(", Binaries\\")));
         }
         if let Some(warning) = crate::proxy::twice_warning(&loaders) {
+            self.problem(&warning);
+        }
+        for warning in crate::proxy::asi_warnings(root) {
             self.problem(&warning);
         }
         if paths::loader_dir(root).join("disabled").exists() {
