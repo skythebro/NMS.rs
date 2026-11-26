@@ -397,7 +397,10 @@ mod tests {
         std::fs::write(proxy::path(&root, "winmm.dll"), b"MZ NMS.rs proxy marker").unwrap();
         let err = install_from(&root, &here, false, Some("asi")).unwrap_err();
         assert!(err.contains("No ASI loader"), "{err}");
+        // Under a name NMS does not load it does not count; as winhttp.dll it does.
         std::fs::write(proxy::path(&root, "dinput8.dll"), ual()).unwrap();
+        assert!(install_from(&root, &here, false, Some("asi")).unwrap_err().contains("No ASI loader"));
+        std::fs::write(proxy::path(&root, "winhttp.dll"), ual()).unwrap();
         let text = install_from(&root, &here, false, Some("asi")).unwrap();
         assert!(text.contains("removed") && text.contains("winmm.dll"), "{text}");
         assert!(proxy::installed(&root).is_empty());

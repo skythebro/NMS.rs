@@ -57,7 +57,7 @@ from source unless marked.
 | `InitializeASI` | We do not export it, so UAL calls nothing; booting from DllMain works under every ASI loader. Adding it would give two boot paths. Keep it out. | Confirmed (code) |
 | Double load | The `Local\NMS.rs-loader-<pid>` mutex is per process, not per file name, so `xinput9_1_0.dll` (ours) or `winmm.dll` (ours) plus `nms_rs.asi` still boots once; the second writes the "Keep one NMS.rs file" line. Two .asi copies: same. | Confirmed (code); in-game untested |
 | Log name | `own_file_name()` gives `nms_rs.asi`, so `core.log` says "loaded ... as nms_rs.asi". | Confirmed (code) |
-| Start time | Our proxy's DllMain runs while Windows resolves NMS.exe's static imports. As an .asi it runs at UAL's first hooked kernel32 call, in the CRT start-up. Both are before WinMain, so before the game opens any GAMEDATA file; the gap should be milliseconds. The UI merge (`nms-rs.exe prepare`) then races the game's first pak read exactly as it does today. | Inferred; measure in game |
+| Start time | Our proxy's DllMain runs while Windows resolves NMS.exe's static imports. As an .asi it runs at UAL's first hooked kernel32 call that passes its checks. UAL skips calls from the exe's entry-point section and from Steam's `.bind` section, so the trigger may come later than the CRT start-up, and the exact point in NMS is not established. Whether that is still before the game opens its first GAMEDATA pak (and how the UI merge race changes) has to be measured. | Unknown; measure in game |
 | Code snapshot | `ProcessImage::current()` copies NMS.exe's code at boot so signatures see original bytes. As a proxy we boot before any ASI plugin. As an .asi, plugins loaded earlier (`LoadExtraPlugins`, earlier folders, earlier names) have already run their DllMain and maybe their `InitializeASI`, and may have hooked NMS.exe. A hooked prologue that one of our signatures covers fails closed ("not found"), it does not crash. This is the main real difference. | Inferred; measure in game |
 | Near memory | `hold_near` reserves 128 x 1 MB near the image. Earlier plugins' trampolines may already sit there; we take what is left and log the count. | Inferred |
 | Proton | The override belongs to the ASI loader's DLL (`WINEDLLOVERRIDES="xinput9_1_0=n,b" %command%` for UAL as xinput). The .asi needs none: it is loaded by full path. | Inferred; UAL's own hooks under Wine Unknown |
@@ -93,9 +93,17 @@ Prototype in `nms-launcher/src/proxy.rs` and `main.rs`:
 - **Find our .asi**: any `*.asi` with the NMS.rs marker in `Binaries\`, `scripts\`, `plugins\`,
   `update\`, and one level of subfolders under the last three (UAL's own search). By marker, not
   by name, so a renamed file (DaninFuchs' `nms_rs.asi` made from the xinput build) counts.
-- **Find an ASI loader**: a foreign file in `Binaries\` under any UAL name that exports
-  `IsUltimateASILoader` (PE export table, not a byte search). Other ASI loaders without that
-  export are not detected (**Unknown** how many NMS players use one).
+- **Find an ASI loader**: a foreign file in `Binaries\` that exports `IsUltimateASILoader` (PE
+  export table, not a byte search). It only counts under a name the game is known to load:
+  NMS.exe imports `xinput9_1_0`, `winmm` and `winhttp` (read from its import table, build 186923),
+  and `version` comes in through PlayFab, DLSS and Streamline DLLs. UAL under another of its 19
+  names (`dinput8.dll`, say) is listed as "not known to load" and does not allow `--as asi`, so we
+  never delete a working DLL for a loader that may never run. `dxgi`/`d3d12` are imported by
+  Streamline and XeSS but are left out until tested. Confirmed on the real file: UAL x64
+  `xinput9_1_0.dll` from `x64-latest` (downloaded 2026-11-26 to %TEMP% only, read as bytes,
+  SHA256 `0fe291f24e3a15ea942fab8756e1fa89b4a8860ace1db604cfbfad5401a51e05`, 861 exports) is
+  detected (`NMS_RS_UAL_DLL=<file> cargo test -p nms-launcher real_ultimate`). Other ASI
+  loaders without that export are not detected (**Unknown** how many NMS players use one).
 - **Read `LoadFromScriptsOnly`** from the ini files above, last one wins.
 - **Status lines** (`prepare`, Pack logs, `nms-rs status`-adjacent): every loader file of ours
   (DLLs and .asi paths), the ASI loader if any, and warnings: ".asi but no ASI loader, it will not
@@ -109,17 +117,23 @@ Prototype in `nms-launcher/src/proxy.rs` and `main.rs`:
   `nms_rs.asi` is next to the exe; otherwise the error names `--as asi`. When ours is already an
   .asi it updates that file.
 - **`uninstall`** removes our .asi files too.
-- **Proton line**: with our .asi, the Linux note shows the ASI loader's override, not ours.
-  (egui part not in the prototype: `linux_note` and `loader_note` need `Vec<String>` loaders and
-  two new strings in every language.)
+- **Proton line**: with our .asi, the Linux note shows the ASI loader's override, not ours
+  (`proxy::wine_dll`, read with the loader list in `Manager::new` and `refresh`, not per frame).
+  The "two loader files" note counts .asi files. No new UI strings.
 
-Not done: an egui button "Install as ASI plugin" in the Mods tab next to the "another mod's
-xinput9_1_0.dll" message. Setup's automatic choice covers the common path.
+Not done: an egui button "Install as ASI plugin" in the Mods tab, and translated texts for the
+new warnings (they are English, in `prepare` and Pack logs only). Setup's automatic choice covers
+the common path.
 
 ## Release (`release.py`)
 
 - `rust-build` builds `--features as-asi` and copies it to `<target>\dist\variants\nms_rs.asi`;
   `check_asi_exports` requires exactly our own exports.
+- Checked: `release.py rust-build --version 4.0.8` and `rust --out %TEMP%\nmsasi-out` run and
+  write `NMS.rs-4.0.8-asi.zip` (1.6 MB) next to the others; `test_proxy_variants.py` still
+  passes. `.github/workflows/release.yml` runs those two commands, so once merged CI would build
+  the -asi zip too (and upload it if the workflow uploads `out\*`: check before merging). Add
+  `dev/test_asi_plugin.py` to that workflow at merge time.
 - New optional Nexus file `NMS.rs-<v>-asi.zip`: `Binaries\nms_rs.asi`, the same file as
   `NMS.rs\nms_rs.asi` (so `nms-rs install` can update or reinstall it) and a README (install the
   main zip but keep the ASI loader's xinput9_1_0.dll; no NMS.rs winmm/version next to it).
@@ -130,7 +144,7 @@ xinput9_1_0.dll" message. Setup's automatic choice covers the common path.
 
 ## Tests
 
-- Unit tests (`proxy.rs`, `main.rs`), passing (nms-launcher 151 passed): .asi found by marker in
+- Unit tests (`proxy.rs`, `main.rs`), passing (nms-launcher 153 passed): .asi found by marker in
   each folder UAL searches and not elsewhere, ASI loader found by its PE export (a fake PE in the
   test; System32's xinput is not one), ini `LoadFromScriptsOnly` with later files winning,
   install picks the folder, plain install picks the .asi next to an ASI loader, refuses `--as asi`
@@ -141,7 +155,8 @@ xinput9_1_0.dll" message. Setup's automatic choice covers the common path.
   Python with `LoadLibraryW` and no flags (as UAL does), checks the export list, both markers, no
   `InitializeASI`, that the load succeeds (DllMain returned TRUE), that the boot thread ends
   (host is not NMS.exe) and that no `xinput9_1_0.dll` gets mapped. Then the same for the xinput
-  build renamed to `.asi`. It does not run UAL itself or the double-load mutex (that one is
+  build renamed to `.asi`. The thread check is a smoke check: it would also pass if the boot
+  thread never started. It does not run UAL itself or the double-load mutex (that one is
   covered by `boot::tests::only_the_first_claim_boots`).
 - In game (needs Bryan, not done): see below.
 

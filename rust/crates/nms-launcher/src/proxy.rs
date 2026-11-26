@@ -21,6 +21,10 @@ pub const ASI_LOADER_NAMES: [&str; 19] = [
     "d3d11.dll", "d3d12.dll", "dsound.dll", "wininet.dll", "winhttp.dll", "binkw64.dll", "bink2w64.dll",
     "xinput1_1.dll", "xinput1_2.dll", "xinput1_3.dll", "xinput1_4.dll", "xinputuap.dll",
 ];
+/// The ones the game is known to load at startup: NMS.exe imports xinput9_1_0, winmm and
+/// winhttp; version comes in through the PlayFab, DLSS and Streamline DLLs. An ASI loader under any
+/// other name may never load, so it does not count for installing our .asi.
+pub const ASI_LOADER_EFFECTIVE: [&str; 4] = ["xinput9_1_0.dll", "winmm.dll", "winhttp.dll", "version.dll"];
 /// Export only Ultimate ASI Loader has.
 const ASI_LOADER_EXPORT: &str = "IsUltimateASILoader";
 /// Folders under `Binaries\` that Ultimate ASI Loader loads `*.asi` from after its own folder, each
@@ -130,9 +134,18 @@ pub fn is_asi_loader(path: &Path) -> bool {
     }
 }
 
-/// The file name of an ASI loader in `Binaries\`, if there is one.
+/// The file name of an ASI loader in `Binaries\` under a name the game loads, if there is one.
 pub fn asi_loader(root: &Path) -> Option<&'static str> {
-    ASI_LOADER_NAMES.iter().copied().find(|n| is_asi_loader(&path(root, n)))
+    ASI_LOADER_EFFECTIVE.iter().copied().find(|n| is_asi_loader(&path(root, n)))
+}
+
+/// ASI loaders under names the game is not known to load (`dinput8.dll`, say).
+pub fn idle_asi_loaders(root: &Path) -> Vec<&'static str> {
+    ASI_LOADER_NAMES
+        .iter()
+        .copied()
+        .filter(|n| !ASI_LOADER_EFFECTIVE.contains(n) && is_asi_loader(&path(root, n)))
+        .collect()
 }
 
 /// `LoadFromScriptsOnly=1` in the loader's ini files (later files win, as in the loader):
@@ -252,6 +265,9 @@ pub fn status_lines(root: &Path) -> Vec<String> {
     if let Some(loader) = asi_loader(root) {
         lines.push(format!("ASI loader: Binaries\\{loader} (Ultimate ASI Loader)"));
     }
+    for idle in idle_asi_loaders(root) {
+        lines.push(format!("ASI loader under a name the game is not known to load: Binaries\\{idle}"));
+    }
     lines.extend(asi_warnings(root));
     lines
 }
@@ -346,6 +362,17 @@ pub(crate) mod tests {
         }
     }
 
+    /// The real Ultimate ASI Loader file (read, never loaded) when `NMS_RS_UAL_DLL` points at one.
+    #[test]
+    fn real_ultimate_asi_loader_is_detected() {
+        let Some(file) = std::env::var_os("NMS_RS_UAL_DLL") else { return };
+        let root = temp_root("real-ual");
+        std::fs::copy(&file, path(&root, MAIN)).unwrap();
+        assert_eq!(asi_loader(&root), Some(MAIN));
+        assert!(installed(&root).is_empty(), "not ours");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn asi_found_in_every_folder_ual_searches() {
         let root = temp_root("asi");
@@ -408,6 +435,17 @@ pub(crate) mod tests {
         std::fs::write(path(&root, "nms_rs.asi"), b"NMS.rs proxy marker").unwrap();
         assert_eq!(wine_dll(&root, &installed_all(&root)), "winmm.dll");
         assert_eq!(wine_dll(&root, &["version.dll".to_string()]), "version.dll");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Ultimate ASI Loader as dinput8.dll: NMS is not known to load that name, so it does not count.
+    #[test]
+    fn asi_loader_under_an_idle_name_does_not_count() {
+        let root = temp_root("idle");
+        std::fs::write(path(&root, "dinput8.dll"), fake_pe(&["IsUltimateASILoader"])).unwrap();
+        assert_eq!(asi_loader(&root), None);
+        assert_eq!(idle_asi_loaders(&root), ["dinput8.dll"]);
+        assert!(status_lines(&root).iter().any(|l| l.contains("not known to load: Binaries\\dinput8.dll")));
         let _ = std::fs::remove_dir_all(&root);
     }
 }
