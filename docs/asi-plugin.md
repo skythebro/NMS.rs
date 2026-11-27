@@ -1,6 +1,6 @@
 # NMS.rs as an ASI plugin (design, not released)
 
-Status: research and prototype on branch `asi-plugin`. Nothing here is released, uploaded or
+Status: prototype on branch `asi-plugin`, in-game runs 1 and 2 passed on Windows. Nothing here is released, uploaded or
 merged. Facts are marked **Confirmed** (read in our code or in the loader's source, or tested
 here), **Inferred** (follows from confirmed facts, not tested) or **Unknown**.
 
@@ -200,3 +200,26 @@ question is answered for Windows. UAL wrote no files into `Binaries` (no ini, lo
 CrashDumps). One expected line: the installed 4.0.8-test manager's `prepare` said "The Rust mods
 are not installed", because it does not know .asi files; the branch manager lists them
 (`installed_all`). The snapshot question (other plugins hooking first) needs run 2.
+
+### Run 2 (2026-11-27, Windows): same, plus Imperial Galactic Map 0.70 as `Binaries\IGM.asi`
+
+Passed. IGM 0.70 ships as its own `xinput9_1_0.dll` (SHA256 `73baecb1...`, 15 exports, not an
+ASI loader); its README says to rename it to `IGM.asi` when an ASI loader is installed. Both
+plugins sat in `Binaries\`; `IGM.asi` sorts before `nms_rs.asi`.
+
+- NMS.rs: our boot to the game's first frame 4.87 s (run 1: 4.84 s), 128 of 128 blocks held,
+  same 13 mods, no signature missing, Update hook and Hide mod warning ok, Mods row in Options
+  and the pause list worked, a setting applied in game.
+- IGM: `IGM_compatibility.log` "all structural patterns and dependency links verified", every
+  bind found; its own Options-menu button and catalogue opened (`igm_diagnostico.log`). Both
+  mods add a row to the Options list and both worked in the same session.
+- So in this pair neither mod's hooks broke the other's signatures. The load order inside a
+  folder is still not guaranteed in general; the "install in `Binaries\` itself" rule stays.
+- IGM writes `Binaries\IGM_compatibility.log` and a `Binaries\IGM\IGM_datos\` data folder.
+  The manager should list them as IGM's, never as strays of ours.
+
+Restored afterwards: our `xinput9_1_0.dll` (`8f5c64fe...`) back, UAL, both .asi files and IGM's
+files moved to `%TEMP%\nmsasi-backup\run2-removed`, game-folder-guard clean.
+
+Verdict: on Windows the ASI route works as designed. Still untested: Proton with UAL, and the
+branch manager's Setup/`install --as asi` against a real game folder.
