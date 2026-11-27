@@ -132,8 +132,9 @@ ASI_README = (
     "3. If the ASI loader's ini sets LoadFromScriptsOnly=1, move it to Binaries\\scripts\\.\n"
     "4. Keep only one NMS.rs loader file: no NMS.rs winmm.dll or version.dll next to it.\n\n"
     "To remove it, delete Binaries\\nms_rs.asi.\n"
-    "\nLinux / Proton (beta): the launch option is the ASI loader's, for example\n"
-    "WINEDLLOVERRIDES=\"xinput9_1_0=n,b\" %command%\n"
+    "\nLinux / Proton: NOT TESTED with an ASI loader. If you try it, the launch option is the ASI\n"
+    "loader's, for example WINEDLLOVERRIDES=\"xinput9_1_0=n,b\" %command%\n"
+    "Please report on the Nexus page whether it works.\n"
 )
 
 

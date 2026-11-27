@@ -221,5 +221,31 @@ plugins sat in `Binaries\`; `IGM.asi` sorts before `nms_rs.asi`.
 Restored afterwards: our `xinput9_1_0.dll` (`8f5c64fe...`) back, UAL, both .asi files and IGM's
 files moved to `%TEMP%\nmsasi-backup\run2-removed`, game-folder-guard clean.
 
-Verdict: on Windows the ASI route works as designed. Still untested: Proton with UAL, and the
-branch manager's Setup/`install --as asi` against a real game folder.
+Verdict: on Windows the ASI route works as designed.
+
+### Manager on the real game folder (2026-11-27, game closed)
+
+Branch `nms-rs.exe` (dist build) run from `%TEMP%` with `nms_rs.asi` next to it, cwd the game
+folder. Our `xinput9_1_0.dll` backed up first and restored after (`8f5c64fe...` checked).
+
+| Step | Result |
+|---|---|
+| Our xinput9_1_0.dll, no ASI loader: `install --as asi` | refused, "No ASI loader found ... would not load", nothing changed |
+| UAL put in as xinput9_1_0.dll by hand, plain `install` | installed `Binaries\nms_rs.asi (ASI plugin, loaded by Binaries\xinput9_1_0.dll)`, UAL untouched |
+| `install --as xinput9_1_0` | refused, "is an ASI loader ... not replacing it ... nms-rs install --as asi" |
+| `install --as asi` again | updated in place |
+| `pack-logs` note | "NMS.rs loader file: Binaries\nms_rs.asi", "ASI loader: Binaries\xinput9_1_0.dll (Ultimate ASI Loader)" (UAL was also listed under "Other mods' files"; now listed once) |
+| `uninstall` | removed `nms_rs.asi`, "xinput9_1_0.dll is not ours; leaving it" |
+
+Setup itself calls the same `install`, so it takes the same path; the GUI Setup flow was not
+clicked through.
+
+### Linux / Proton: shipped untested (Bryan, 2026-11-27)
+
+Nobody here can test Proton. The ASI zip README says so, and the Nexus page gets a notice.
+Suggested text for the page (Bryan pastes it; nothing is uploaded from here):
+
+> **ASI plugin (nms_rs.asi): Linux / Proton not tested.** It works on Windows with Ultimate ASI
+> Loader and next to Imperial Galactic Map. On Proton, set the launch option for the ASI
+> loader, for example `WINEDLLOVERRIDES="xinput9_1_0=n,b" %command%`. If you try it, please
+> tell us in the comments whether it works.

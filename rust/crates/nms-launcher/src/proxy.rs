@@ -258,11 +258,17 @@ pub fn status_lines(root: &Path) -> Vec<String> {
         many => format!("NMS.rs loader file: Binaries\\{}", many.join(", Binaries\\")),
     }];
     lines.extend(twice_warning(&names));
-    let foreign: Vec<&str> = NAMES.iter().copied().filter(|n| path(root, n).is_file() && !names.iter().any(|o| o == n)).collect();
+    let loader = asi_loader(root);
+    // The ASI loader gets its own line below.
+    let foreign: Vec<&str> = NAMES
+        .iter()
+        .copied()
+        .filter(|n| path(root, n).is_file() && !names.iter().any(|o| o == n) && loader != Some(*n))
+        .collect();
     if !foreign.is_empty() {
         lines.push(format!("Other mods' files with an NMS.rs name: Binaries\\{}", foreign.join(", Binaries\\")));
     }
-    if let Some(loader) = asi_loader(root) {
+    if let Some(loader) = loader {
         lines.push(format!("ASI loader: Binaries\\{loader} (Ultimate ASI Loader)"));
     }
     for idle in idle_asi_loaders(root) {
@@ -416,6 +422,7 @@ pub(crate) mod tests {
         assert_eq!(asi_target(&root, Some("xinput9_1_0.dll")), "scripts\\nms_rs.asi");
         let lines = status_lines(&root);
         assert!(lines.iter().any(|l| l == "ASI loader: Binaries\\xinput9_1_0.dll (Ultimate ASI Loader)"), "{lines:?}");
+        assert!(!lines.iter().any(|l| l.contains("Other mods' files")), "listed once: {lines:?}");
         let _ = std::fs::remove_dir_all(&root);
     }
 
