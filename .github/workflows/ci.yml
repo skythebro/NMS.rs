@@ -41,6 +41,9 @@ jobs:
 
       - name: Release zip check
         run: |
+          # nms_rs.asi first (same output file name), kept in release\variants for the zips.
+          cargo build --release -p nms-proxy --features as-asi
+          python -I -c "import os, shutil; os.makedirs('target/release/variants', exist_ok=True); shutil.copyfile('target/release/xinput9_1_0.dll', 'target/release/variants/nms_rs.asi')"
           cargo build --release -p nms-launcher -p nms-proxy
           python -I ../dev/test_release_rust.py
           python -I ../dev/test_clean_install.py

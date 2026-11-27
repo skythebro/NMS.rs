@@ -9,7 +9,7 @@ Each change to game behaviour is a live switch on the in-game Mods page (Options
 Patches are found by a unique byte signature and checked before they are written. If the game
 code moved after an update, that part stays off and the game stays vanilla.
 
-Version 4.0.8, for game build 186923.
+Version 4.0.9, for game build 186923.
 
 ## Mods
 
@@ -59,19 +59,22 @@ cd NMS.rs\rust
 cargo test --workspace
 cargo clippy --workspace --all-targets
 cd ..
-py -3 release.py rust-build --version 4.0.8
-py -3 release.py rust --version 4.0.8 --out %TEMP%\nmsrs-zip
+py -3 release.py rust-build --version 4.0.9
+py -3 release.py rust --version 4.0.9 --out %TEMP%\nmsrs-zip
 ```
 
 `rust-build` builds `nms-rs.exe` and `xinput9_1_0.dll` with the `dist` profile (no debug info, no
 symbols, build paths remapped) and fails if your user or repository folder name is still inside
 them. It also builds the loader as `winmm.dll` and `version.dll` (Cargo features `as-winmm`,
 `as-version`) for players whose `xinput9_1_0.dll` belongs to another mod, and checks that each
-exports exactly what its System32 namesake exports. `rust` writes `NMS.rs-<version>.zip`, a
-`SHA256SUMS.txt` inside it and a `.sha256` file next to it, plus `NMS.rs-<version>-winmm.zip` and
-`NMS.rs-<version>-version.zip` ("DLL only" files). Both honour `CARGO_TARGET_DIR`.
-`py -3 -I dev\test_release_rust.py` checks the zips, `py -3 -I dev\test_proxy_variants.py` calls
-through the winmm and version DLLs.
+exports exactly what its System32 namesake exports, and as the ASI plugin `nms_rs.asi` (feature
+`as-asi`, for players whose `xinput9_1_0.dll` is an ASI loader; see `docs/asi-plugin.md`). `rust`
+writes `NMS.rs-<version>.zip`, a `SHA256SUMS.txt` inside it and a `.sha256` file next to it, plus
+`NMS.rs-<version>-asi.zip` (the same files with `Binaries\nms_rs.asi` as the loader),
+`NMS.rs-<version>-winmm.zip` and `NMS.rs-<version>-version.zip` ("DLL only" files). Both honour
+`CARGO_TARGET_DIR`. `py -3 -I dev\test_release_rust.py` checks the zips,
+`py -3 -I dev\test_proxy_variants.py` calls through the winmm and version DLLs and
+`py -3 -I dev\test_asi_plugin.py` loads `nms_rs.asi` the way an ASI loader does.
 
 For a quick local test, `cargo build --release -p nms-launcher -p nms-proxy`, then
 `target\release\nms-rs.exe install` from inside a game folder copies the DLL into `Binaries`
