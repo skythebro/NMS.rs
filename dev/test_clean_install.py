@@ -75,7 +75,12 @@ def check(zip_path: Path, tmp: Path) -> None:
         assert (root / "GAMEDATA" / "MODS" / name).is_dir(), f"{name} not in GAMEDATA\\MODS"
     update = manager(loader, "mods", "update-all")
     assert update.returncode == 0 and "nothing to update" in update.stdout, update.stdout + update.stderr
-    assert (root / "Binaries" / "xinput9_1_0.dll").is_file(), "loader DLL not next to NMS.exe"
+    # The ASI zip ships Binaries\nms_rs.asi and must not bring an xinput9_1_0.dll (it would replace
+    # the player's ASI loader).
+    asi = zip_path.name.endswith("-asi.zip")
+    loader = release.ASI_FILE if asi else "xinput9_1_0.dll"
+    assert (root / "Binaries" / loader).is_file(), f"{loader} not next to NMS.exe"
+    assert asi != (root / "Binaries" / "xinput9_1_0.dll").is_file(), "wrong loader file in Binaries"
     assert "wrong folder" not in fresh.stderr, fresh.stderr
 
     misplaced = manager(wrong / "Binaries" / "NMS.rs", "mods", "status")

@@ -13,7 +13,16 @@ other stores the loader starts with any copy of the game, but only Steam is test
 
 ### Another mod already uses `Binaries\xinput9_1_0.dll`
 
-Only one file can have that name. Keep the other mod's file (do not let the NMS.rs zip replace
+Only one file can have that name.
+
+If that file is an ASI loader (Ultimate ASI Loader, which Imperial Galactic Map and others use),
+download `NMS.rs-<version>-asi.zip` instead of the main zip. It has the same files, but the
+loader is `Binaries\nms_rs.asi`, which the ASI loader loads, and it has no
+`xinput9_1_0.dll`, so yours stays. The manager recognises the ASI loader and keeps
+`nms_rs.asi` up to date. Linux / Proton with an ASI loader is not tested; the launch option is
+the ASI loader's, for example `WINEDLLOVERRIDES="xinput9_1_0=n,b" %command%`.
+
+For any other mod's file: keep the other mod's file (do not let the NMS.rs zip replace
 it), then also download one "DLL only" file from the Nexus page and extract it into the game
 folder:
 

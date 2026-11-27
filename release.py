@@ -5,7 +5,8 @@
     py -3 release.py rust --version 4.0.0 --out DIR   write NMS.rs-<version>.zip and its .sha256 into DIR,
                                                       plus NMS.rs-<version>-winmm.zip and -version.zip
                                                       (Nexus "DLL only" files, see PROXY_VARIANTS)
-                                                      and NMS.rs-<version>-asi.zip (ASI_FILE)
+                                                      and NMS.rs-<version>-asi.zip (the main zip with
+                                                      Binaries/nms_rs.asi as the loader, see ASI_FILE)
     py -3 release.py proxy-exports                    rewrite rust/crates/nms-proxy/exports/*.txt from
                                                       this PC's System32 (dev only)
 
@@ -101,6 +102,8 @@ RUST_README = (
     "the manager's Settings tab and send the zip.\n"
     "\nIf another mod already uses Binaries\\xinput9_1_0.dll, keep that file and get the NMS.rs\n"
     "\"DLL only\" file named winmm or version from the Nexus page instead (see its README).\n"
+    "If that file is an ASI loader (Ultimate ASI Loader, used by Imperial Galactic Map), get the\n"
+    "NMS.rs ASI zip instead of this one.\n"
 )
 # README of the "DLL only" zips. {dll}: winmm.dll; {stem}: winmm.
 VARIANT_README = (
@@ -119,19 +122,25 @@ VARIANT_README = (
     "\nLinux / Proton (beta): the launch option for this file is\n"
     "WINEDLLOVERRIDES=\"{stem}=n,b\" %command%\n"
 )
-# README of the ASI zip (not released yet, docs/asi-plugin.md).
+# README of the ASI zip: the full main zip with the loader as Binaries\nms_rs.asi instead of
+# Binaries\xinput9_1_0.dll (docs/asi-plugin.md).
 ASI_README = (
-    "NMS.rs {version}: loader as an ASI plugin, Binaries\\nms_rs.asi\n\n"
-    "This file is only for players whose Binaries\\xinput9_1_0.dll is an ASI loader (Ultimate ASI\n"
-    "Loader, used by Imperial Galactic Map and others). The ASI loader loads nms_rs.asi, and\n"
-    "nms_rs.asi loads the NMS.rs mods.\n\n"
-    "1. Install the main NMS.rs {version} zip first, but keep the ASI loader's\n"
-    "   Binaries\\xinput9_1_0.dll (do not let the main zip replace it).\n"
-    "2. Extract this zip into the game folder: Binaries\\nms_rs.asi lands next to NMS.exe, and a\n"
-    "   copy goes to NMS.rs\\nms_rs.asi so the manager can reinstall it.\n"
-    "3. If the ASI loader's ini sets LoadFromScriptsOnly=1, move it to Binaries\\scripts\\.\n"
-    "4. Keep only one NMS.rs loader file: no NMS.rs winmm.dll or version.dll next to it.\n\n"
-    "To remove it, delete Binaries\\nms_rs.asi.\n"
+    "NMS.rs {version}, ASI version\n\n"
+    "For players whose Binaries\\xinput9_1_0.dll is an ASI loader (Ultimate ASI Loader, used by\n"
+    "Imperial Galactic Map and others). Everything is the same as the main zip, except that the\n"
+    "loader is Binaries\\nms_rs.asi, which the ASI loader loads. Your xinput9_1_0.dll stays.\n"
+    "Without an ASI loader, get the main NMS.rs zip instead.\n\n"
+    "Extract this zip into your No Man's Sky game folder (the one that holds Binaries\n"
+    "and GAMEDATA), so that Binaries\\nms_rs.asi and NMS.rs\\nms-rs.exe land there.\n\n"
+    "1. Run NMS.rs\\nms-rs.exe once to open the manager. Install the mods you want,\n"
+    "   park the ones you do not, and pick your grid and slot sizes.\n"
+    "2. Press Play in Steam. No launch option is needed.\n\n"
+    "Keep only one NMS.rs loader file: no NMS.rs xinput9_1_0.dll, winmm.dll or version.dll\n"
+    "next to nms_rs.asi. If the ASI loader's ini sets LoadFromScriptsOnly=1, move nms_rs.asi to\n"
+    "Binaries\\scripts. The manager checks both and says so.\n\n"
+    "If you used version 3 (NMS.py), the manager finds the old setup and asks first.\n"
+    "Mod folders in NMS.rs\\stock are the copies the manager installs from.\n"
+    "To remove everything, delete Binaries\\nms_rs.asi and the NMS.rs folder.\n"
     "\nLinux / Proton: NOT TESTED with an ASI loader. If you try it, the launch option is the ASI\n"
     "loader's, for example WINEDLLOVERRIDES=\"xinput9_1_0=n,b\" %command%\n"
     "Please report on the Nexus page whether it works.\n"
@@ -163,19 +172,23 @@ def _sources(folder: Path) -> dict[str, Path]:
     return {p.relative_to(folder).as_posix(): p for p in sorted(folder.rglob("*")) if p.is_file()}
 
 
-def rust_files(version: str) -> dict[str, Path]:
-    """{path inside the zip: source}. Paths are relative to the game folder."""
+def rust_files(version: str, asi: bool = False) -> dict[str, Path]:
+    """{path inside the zip: source}. Paths are relative to the game folder. `asi`: the ASI zip,
+    with Binaries/nms_rs.asi as the loader instead of Binaries/xinput9_1_0.dll."""
     dll, exe = RUST_TARGET / "xinput9_1_0.dll", RUST_TARGET / "nms-rs.exe"
-    for path in (dll, exe):
+    plugin = PROXY_VARIANT_DIR / ASI_FILE
+    for path in (dll, exe, plugin):
         if not path.is_file():
             raise SystemExit(f"Missing {path}. Build it first: py -3 release.py rust-build --version {version}")
-    files: dict[str, Path] = {"Binaries/xinput9_1_0.dll": dll, "NMS.rs/nms-rs.exe": exe}
-    # Not in Binaries: Setup installs it only when Binaries\xinput9_1_0.dll is an ASI loader.
-    asi = PROXY_VARIANT_DIR / ASI_FILE
-    if not asi.is_file():
-        raise SystemExit(f"Missing {asi}. Build it first: py -3 release.py rust-build --version {version}")
-    check_asi_exports(asi)
-    files[f"NMS.rs/{ASI_FILE}"] = asi
+    check_asi_exports(plugin)
+    files: dict[str, Path] = {"NMS.rs/nms-rs.exe": exe}
+    if asi:
+        files[f"Binaries/{ASI_FILE}"] = plugin
+    else:
+        files["Binaries/xinput9_1_0.dll"] = dll
+    # Also in NMS.rs: Setup installs it when Binaries\xinput9_1_0.dll is an ASI loader, and
+    # `nms-rs install` updates an installed nms_rs.asi from it.
+    files[f"NMS.rs/{ASI_FILE}"] = plugin
     versions: dict[str, str] = {}
     for name in RUST_STOCK_MODS:
         sources = _sources(MODS_SRC / name)
@@ -195,10 +208,11 @@ def rust_files(version: str) -> dict[str, Path]:
     info.write_text(json.dumps(versions, indent=2) + "\n", encoding="utf-8")
     files["NMS.rs/stock/stock.json"] = info
     # No default settings files: every Rust mod writes its own defaults on first load.
-    readme = BUILD / "README-rust.txt"
-    readme.write_text(RUST_README.format(version=version), encoding="utf-8")
+    tag = "asi" if asi else "rust"
+    readme = BUILD / f"README-{tag}.txt"
+    readme.write_text((ASI_README if asi else RUST_README).format(version=version), encoding="utf-8")
     files["README.txt"] = readme
-    sums = BUILD / "SHA256SUMS-rust.txt"
+    sums = BUILD / f"SHA256SUMS-{tag}.txt"
     sums.write_text(
         "".join(f"{_sha256(source)} *{name}\n" for name, source in sorted(files.items())),
         encoding="utf-8",
@@ -254,17 +268,16 @@ def make_variant_zips(version: str, out: Path) -> list[Path]:
         _zip(path, {f"Binaries/{dll}": source, "README.txt": readme})
         _write_sha256(path)
         made.append(path)
-    source = PROXY_VARIANT_DIR / ASI_FILE
-    if not source.is_file():
-        raise SystemExit(f"Missing {source}. Build it first: py -3 release.py rust-build --version {version}")
-    check_asi_exports(source)
-    readme = BUILD / "README-asi.txt"
-    readme.write_text(ASI_README.format(version=version), encoding="utf-8")
-    path = out / f"NMS.rs-{version}-asi.zip"
-    _zip(path, {f"Binaries/{ASI_FILE}": source, f"NMS.rs/{ASI_FILE}": source, "README.txt": readme})
-    _write_sha256(path)
-    made.append(path)
     return made
+
+
+def make_asi_zip(version: str, out: Path) -> Path:
+    """NMS.rs-<version>-asi.zip: the whole main zip, with Binaries/nms_rs.asi as the loader and no
+    Binaries/xinput9_1_0.dll, so extracting it keeps an ASI loader of that name."""
+    path = out / f"NMS.rs-{version}-asi.zip"
+    _zip(path, rust_files(version, asi=True))
+    _write_sha256(path)
+    return path
 
 
 def check_asi_exports(built: Path) -> None:
@@ -429,6 +442,7 @@ def main() -> int:
             raise SystemExit(__doc__)
         out = Path(opts[3]).resolve()
         make_rust_zip(opts[1], out)
+        make_asi_zip(opts[1], out)
         make_variant_zips(opts[1], out)
         return 0
     if args == ["proxy-exports"]:

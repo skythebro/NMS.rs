@@ -1,6 +1,6 @@
-# NMS.rs as an ASI plugin (design, not released)
+# NMS.rs as an ASI plugin
 
-Status: prototype on branch `asi-plugin`, in-game runs 1 and 2 passed on Windows. Nothing here is released, uploaded or
+Status: merged to main 2026-11-27, in-game runs 1 and 2 passed on Windows. Not released or uploaded yet; nothing
 merged. Facts are marked **Confirmed** (read in our code or in the loader's source, or tested
 here), **Inferred** (follows from confirmed facts, not tested) or **Unknown**.
 
@@ -129,19 +129,21 @@ the common path.
 
 - `rust-build` builds `--features as-asi` and copies it to `<target>\dist\variants\nms_rs.asi`;
   `check_asi_exports` requires exactly our own exports.
-- Checked: `release.py rust-build --version 4.0.8` and `rust --out %TEMP%\nmsasi-out` run and
-  write `NMS.rs-4.0.8-asi.zip` (1.6 MB) next to the others; `test_proxy_variants.py` still
-  passes. `.github/workflows/release.yml` runs those two commands, so once merged CI would build
-  the -asi zip too (and upload it if the workflow uploads `out\*`: check before merging). Add
-  `dev/test_asi_plugin.py` to that workflow at merge time.
-- New optional Nexus file `NMS.rs-<v>-asi.zip`: `Binaries\nms_rs.asi`, the same file as
-  `NMS.rs\nms_rs.asi` (so `nms-rs install` can update or reinstall it) and a README (install the
-  main zip but keep the ASI loader's xinput9_1_0.dll; no NMS.rs winmm/version next to it).
-- Decided (Bryan, 2026-11-26): the main zip also ships `NMS.rs\nms_rs.asi` (1.6 MB), so Setup
-  can install the .asi with no extra download (`dev/test_release_rust.py` checks it). The main
-  zip still contains
-  `Binaries\xinput9_1_0.dll`, which overwrites UAL if the player extracts everything; that
-  problem is the same one Snap Angles users have today and is not solved here.
+- Decided (Bryan, 2026-11-26): the main zip also ships `NMS.rs\nms_rs.asi`, so Setup can
+  install the .asi with no extra download.
+- Decided (Bryan, 2026-11-27): `NMS.rs-<v>-asi.zip` is a full second main file, hosted next to
+  the main zip on Nexus: every file of the main zip, but `Binaries\nms_rs.asi` instead of
+  `Binaries\xinput9_1_0.dll`, so extracting it keeps the player's ASI loader (this solves the
+  "main zip overwrites UAL" problem for ASI users). Its README is the main README for ASI users,
+  with Proton marked not tested. `release.py make_asi_zip`; the small asi-only zip is gone.
+- `release.yml` (tag push) builds it, runs `test_clean_install.py` on it (loader is
+  `Binaries\nms_rs.asi`, no `xinput9_1_0.dll`), runs `test_asi_plugin.py`, attests it with the
+  other zips and attaches it to the GitHub Release with its `.sha256`; the release notes say who
+  needs it. `test_release_rust.py` checks it has exactly the main zip's file list with the loader
+  swapped, the same `nms_rs.asi` in both places, and SHA256SUMS to match.
+- Checked locally with version 4.0.9: workspace tests, `rust-build`, `rust --out`, all four zips
+  (main and asi 5.5 MB each), `test_release_rust`, `test_clean_install` on both full zips,
+  `test_asi_plugin`, `test_proxy_variants`: all pass.
 
 ## Tests
 

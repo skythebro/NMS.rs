@@ -1,7 +1,8 @@
 name: Release
 
 # Push a tag like v4.0.0: GitHub builds the zip from this commit and attaches it to a Release,
-# with the "DLL only" zips (the loader as winmm.dll and version.dll) next to it.
+# with the ASI zip (the same files, loader as Binaries\nms_rs.asi for players with an ASI loader)
+# and the "DLL only" zips (the loader as winmm.dll and version.dll) next to it.
 on:
   push:
     tags: ["v*"]
@@ -46,6 +47,12 @@ jobs:
       - name: Clean install into an empty game folder
         run: python -I dev/test_clean_install.py out/NMS.rs-${{ env.VERSION }}.zip
 
+      - name: Clean install of the ASI zip
+        run: python -I dev/test_clean_install.py out/NMS.rs-${{ env.VERSION }}-asi.zip
+
+      - name: Check nms_rs.asi loads the way an ASI loader loads it
+        run: python -I dev/test_asi_plugin.py
+
       - name: Check the winmm.dll and version.dll loaders pass calls through
         run: python -I dev/test_proxy_variants.py
 
@@ -60,15 +67,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           zip="out/NMS.rs-${VERSION}.zip"
+          asi="out/NMS.rs-${VERSION}-asi.zip"
           winmm="out/NMS.rs-${VERSION}-winmm.zip"
           version="out/NMS.rs-${VERSION}-version.zip"
           notes="NMS.rs ${VERSION}, built by GitHub Actions from this tag.
 
           Install: extract the zip into your No Man's Sky folder (the one with Binaries and GAMEDATA), open NMS.rs\\nms-rs.exe, install the mods you want and press Play.
 
+          Binaries\\xinput9_1_0.dll is an ASI loader (Ultimate ASI Loader, used by Imperial Galactic Map)? Use the -asi zip instead of the main zip: the same files, with the loader as Binaries\\nms_rs.asi, so the ASI loader stays. Linux / Proton with an ASI loader is not tested.
+
           Another mod already uses Binaries\\xinput9_1_0.dll? Keep it and also extract one of the DLL only zips: -winmm (Binaries\\winmm.dll, not beside Snap Angles' winmm.dll) or -version (Binaries\\version.dll).
 
           SHA-256: $(cut -d' ' -f1 "${zip}.sha256")
+          SHA-256 asi: $(cut -d' ' -f1 "${asi}.sha256")
           SHA-256 winmm: $(cut -d' ' -f1 "${winmm}.sha256")
           SHA-256 version: $(cut -d' ' -f1 "${version}.sha256")"
-          gh release create "$GITHUB_REF_NAME" "$zip" "${zip}.sha256" "$winmm" "${winmm}.sha256" "$version" "${version}.sha256" --title "NMS.rs ${VERSION}" --notes "$notes"
+          gh release create "$GITHUB_REF_NAME" "$zip" "${zip}.sha256" "$asi" "${asi}.sha256""$winmm" "${winmm}.sha256" "$version" "${version}.sha256" --title "NMS.rs ${VERSION}" --notes "$notes"

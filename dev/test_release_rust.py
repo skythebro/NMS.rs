@@ -28,12 +28,7 @@ def check_variant_zips() -> None:
         return
     with tempfile.TemporaryDirectory() as tmp:
         made = release.make_variant_zips("4.0.0", Path(tmp))
-        assert [p.name for p in made] == ["NMS.rs-4.0.0-winmm.zip", "NMS.rs-4.0.0-version.zip", "NMS.rs-4.0.0-asi.zip"], made
-        with zipfile.ZipFile(made[-1]) as z:
-            asi = release.ASI_FILE
-            assert sorted(z.namelist()) == [f"Binaries/{asi}", f"NMS.rs/{asi}", "README.txt"], z.namelist()
-            assert "—" not in z.read("README.txt").decode(), "em dash in README"
-            assert b"NMS.rs asi marker" in z.read(f"Binaries/{asi}"), "not the ASI build"
+        assert [p.name for p in made] == ["NMS.rs-4.0.0-winmm.zip", "NMS.rs-4.0.0-version.zip"], made
         for path, dll in zip(made, release.PROXY_VARIANTS):
             sidecar = Path(tmp) / f"{path.name}.sha256"
             assert sidecar.read_text().split()[0] == release._sha256(path), f"bad {sidecar.name}"
@@ -44,6 +39,29 @@ def check_variant_zips() -> None:
                 assert f'WINEDLLOVERRIDES="{dll[:-4]}=n,b"' in readme, readme
                 assert b"NMS.rs proxy marker" in z.read(f"Binaries/{dll}"), f"{dll} is not ours"
     print("ok: variant zips")
+
+
+def check_asi_zip(main_names: list[str]) -> None:
+    """NMS.rs-<v>-asi.zip: every file of the main zip, but Binaries/nms_rs.asi (the ASI build)
+    instead of Binaries/xinput9_1_0.dll, so an ASI loader of that name is not overwritten."""
+    asi = release.ASI_FILE
+    with tempfile.TemporaryDirectory() as tmp:
+        path = release.make_asi_zip("4.0.0", Path(tmp))
+        assert path.name == "NMS.rs-4.0.0-asi.zip", path
+        sidecar = Path(tmp) / f"{path.name}.sha256"
+        assert sidecar.read_text().split()[0] == release._sha256(path), f"bad {sidecar.name}"
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+            want = sorted(n for n in main_names if n != "Binaries/xinput9_1_0.dll") + [f"Binaries/{asi}"]
+            assert sorted(names) == sorted(want), sorted(set(names) ^ set(want))
+            assert b"NMS.rs asi marker" in z.read(f"Binaries/{asi}"), "Binaries loader is not the ASI build"
+            assert z.read(f"Binaries/{asi}") == z.read(f"NMS.rs/{asi}"), "two different nms_rs.asi"
+            readme = z.read("README.txt").decode()
+            assert "—" not in readme, "em dash in README"
+            assert "ASI version" in readme and "NOT TESTED" in readme, readme
+            listed = z.read("NMS.rs/SHA256SUMS.txt").decode()
+            assert f"*Binaries/{asi}" in listed and "xinput9_1_0.dll" not in listed, listed
+    print(f"ok: ASI zip, {len(names)} files, Binaries/{asi} instead of Binaries/xinput9_1_0.dll")
 
 
 def main() -> int:
@@ -76,6 +94,7 @@ def main() -> int:
                      + [("QuickTransferAll", "QUICKDEPOSIT.DDS"), ("QuickTransferAll", "SUITLOCK.DDS")]):
         assert f"NMS.rs/stock/{mod}/{icons}{dds}" in names, f"{mod} icon {dds} not shipped"
     print(f"ok: {len(names)} files, no .py")
+    check_asi_zip(names)
     check_variant_zips()
     return 0
 
