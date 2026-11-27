@@ -179,3 +179,24 @@ Bryan's go-ahead to put it in the game folder.
    back, run `@game-folder-guard`.
 
 Until that passes, the design is not called sound for release.
+
+### Run 1 (2026-11-27, Windows): UAL x64 `0fe291f2...` as xinput9_1_0.dll, `Binaries\nms_rs.asi` only
+
+Passed. `core.log` against the last run on our own xinput9_1_0.dll (2026-11-26):
+
+| | Proxy (baseline) | ASI |
+|---|---|---|
+| Log line | `as XINPUT9_1_0.dll` | `as nms_rs.asi` |
+| Our boot to the game's first frame | 4.85 s | 4.84 s |
+| Near-code memory held | 128 of 128 | 128 of 128 |
+| UI merge finished before first frame | yes (4.3 s before) | yes (4.3 s before) |
+| Mods registered | 13 | 13, same list |
+| Hide mod warning, game context, Update hook | ok | ok |
+| Signatures not found | none | none |
+| Mods page in Options, setting applied in game | ok | ok |
+
+So under UAL our boot starts as early, relative to the game, as the proxy does: the start-time
+question is answered for Windows. UAL wrote no files into `Binaries` (no ini, log or
+CrashDumps). One expected line: the installed 4.0.8-test manager's `prepare` said "The Rust mods
+are not installed", because it does not know .asi files; the branch manager lists them
+(`installed_all`). The snapshot question (other plugins hooking first) needs run 2.
