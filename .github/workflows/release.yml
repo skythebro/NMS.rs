@@ -82,4 +82,4 @@ jobs:
           SHA-256 asi: $(cut -d' ' -f1 "${asi}.sha256")
           SHA-256 winmm: $(cut -d' ' -f1 "${winmm}.sha256")
           SHA-256 version: $(cut -d' ' -f1 "${version}.sha256")"
-          gh release create "$GITHUB_REF_NAME" "$zip" "${zip}.sha256" "$asi" "${asi}.sha256""$winmm" "${winmm}.sha256" "$version" "${version}.sha256" --title "NMS.rs ${VERSION}" --notes "$notes"
+          gh release create "$GITHUB_REF_NAME" "$zip" "${zip}.sha256" "$asi" "${asi}.sha256" "$winmm" "${winmm}.sha256" "$version" "${version}.sha256" --title "NMS.rs ${VERSION}" --notes "$notes"
