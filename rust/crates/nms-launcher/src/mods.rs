@@ -354,8 +354,82 @@ pub fn ensure_stock_files(root: &Path, name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Park a mod. When it was the last other NMS.rs mod in GAMEDATA\MODS, the `AUTO_MODS` go too:
+/// NMS.rs Menu is a script mod, so on its own it kept `z_Combined Mods` alive with nothing left
+/// to open from the pause menu. They come back with the next mod installed (`unpark_auto`).
 pub fn park_mod(root: &Path, name: &str, running: bool) -> Result<String, String> {
     busy(running)?;
+    let mut msg = park_one(root, name)?;
+    if !AUTO_MODS.contains(&name) {
+        let auto = park_auto_when_alone(root);
+        if !auto.is_empty() {
+            msg.push_str(&format!("; also parked {} (no other NMS.rs mod left)", auto.join(", ")));
+        }
+    }
+    Ok(msg)
+}
+
+/// `NMS.rs\parked\auto_parked.txt`: `AUTO_MODS` parked by `park_auto_when_alone`, one per line.
+/// A mod the player parked by hand is never listed, so it stays parked.
+fn auto_parked_path(root: &Path) -> PathBuf {
+    parked_dir(root).join("auto_parked.txt")
+}
+
+/// Any NMS.rs mod other than the `AUTO_MODS` live in GAMEDATA\MODS.
+fn other_ours_live(root: &Path) -> bool {
+    let stock = stock_names(root);
+    dir_names(&mods_dir(root)).iter().any(|n| {
+        n != COMBINED_NAME
+            && !AUTO_MODS.contains(&n.as_str())
+            && (OUR_MODS.contains(&n.as_str()) || stock.iter().any(|s| s == n))
+    })
+}
+
+fn park_auto_when_alone(root: &Path) -> Vec<String> {
+    if other_ours_live(root) {
+        return Vec::new();
+    }
+    let mut done = Vec::new();
+    for name in AUTO_MODS {
+        if mods_dir(root).join(name).is_dir() && park_one(root, name).is_ok() {
+            done.push(name.to_string());
+        }
+    }
+    if !done.is_empty() {
+        let _ = fs::write(auto_parked_path(root), done.join("\n") + "\n");
+    }
+    done
+}
+
+/// Bring back the `AUTO_MODS` that `park_auto_when_alone` parked, now that a mod is back.
+fn unpark_auto(root: &Path) -> Vec<String> {
+    let Ok(text) = fs::read_to_string(auto_parked_path(root)) else {
+        return Vec::new();
+    };
+    let _ = fs::remove_file(auto_parked_path(root));
+    let mut done = Vec::new();
+    for name in text.lines().map(str::trim).filter(|n| AUTO_MODS.contains(n)) {
+        if parked_dir(root).join(name).is_dir() && unpark_one(root, name).is_ok() {
+            done.push(name.to_string());
+        }
+    }
+    done
+}
+
+/// Put back files the UI merge set aside (`<file>.merged`) in a folder that is leaving
+/// GAMEDATA\MODS: z_Combined Mods no longer stands in for them there.
+fn restore_merged(folder: &Path) {
+    for path in walk_files(folder) {
+        let text = path.to_string_lossy();
+        let Some(original) = text.strip_suffix(".merged") else { continue };
+        let original = PathBuf::from(original);
+        if !original.exists() {
+            let _ = fs::rename(&path, &original);
+        }
+    }
+}
+
+fn park_one(root: &Path, name: &str) -> Result<String, String> {
     if name == COMBINED_NAME {
         return Err(format!("{COMBINED_NAME} cannot be parked."));
     }
@@ -369,6 +443,7 @@ pub fn park_mod(root: &Path, name: &str, running: bool) -> Result<String, String
     }
     fs::create_dir_all(parked_dir(root)).map_err(|e| e.to_string())?;
     fs::rename(&src, &dest).map_err(|e| e.to_string())?;
+    restore_merged(&dest);
     let msg = format!("parked {name}");
     log_line(root, &msg);
     Ok(msg)
@@ -376,6 +451,20 @@ pub fn park_mod(root: &Path, name: &str, running: bool) -> Result<String, String
 
 pub fn unpark_mod(root: &Path, name: &str, running: bool) -> Result<String, String> {
     busy(running)?;
+    let mut msg = unpark_one(root, name)?;
+    if AUTO_MODS.contains(&name) {
+        // Brought back by hand: no longer ours to bring back.
+        let _ = fs::remove_file(auto_parked_path(root));
+    } else {
+        let auto = unpark_auto(root);
+        if !auto.is_empty() {
+            msg.push_str(&format!("; also restored {}", auto.join(", ")));
+        }
+    }
+    Ok(msg)
+}
+
+fn unpark_one(root: &Path, name: &str) -> Result<String, String> {
     let src = parked_dir(root).join(name);
     let dest = mods_dir(root).join(name);
     if !src.is_dir() {
@@ -403,9 +492,14 @@ pub fn park_all(root: &Path, running: bool) -> Result<String, String> {
         if !(stock.iter().any(|s| s == &name) || OUR_MODS.contains(&name.as_str())) {
             continue;
         }
-        park_mod(root, &name, false)?;
+        // The AUTO_MODS follow the others below, the same way as when they go one at a time.
+        if AUTO_MODS.contains(&name.as_str()) {
+            continue;
+        }
+        park_one(root, &name)?;
         done.push(name);
     }
+    done.extend(park_auto_when_alone(root));
     if done.is_empty() {
         Ok("nothing to park".into())
     } else {
@@ -431,8 +525,16 @@ pub fn install_mod(root: &Path, name: &str, running: bool) -> Result<String, Str
     } else {
         return Err(format!("No replacement files for {name}."));
     }
-    let msg = format!("installed {name}");
+    let mut msg = format!("installed {name}");
     log_line(root, &msg);
+    if AUTO_MODS.contains(&name) {
+        let _ = fs::remove_file(auto_parked_path(root));
+    } else {
+        let auto = unpark_auto(root);
+        if !auto.is_empty() {
+            msg.push_str(&format!("; also restored {}", auto.join(", ")));
+        }
+    }
     Ok(msg)
 }
 
@@ -833,6 +935,76 @@ mod tests {
         park_mod(&root, "NMSrsMenu", false).unwrap();
         assert!(auto_install(&root).is_empty());
         assert!(!live.exists());
+    }
+
+    fn menu_and_two_mods(tag: &str) -> PathBuf {
+        let root = temp_root(tag);
+        write(&mods_dir(&root).join("NMSrsMenu").join("NMSrsMenu.lua"), "-- menu\n");
+        write(&mods_dir(&root).join("CraftFromStorage").join("x.txt"), "x\n");
+        write(&mods_dir(&root).join("QuickRecharge").join("x.txt"), "x\n");
+        write(&mods_dir(&root).join("Someone Elses Mod").join("x.txt"), "x\n");
+        root
+    }
+
+    /// Removing mods one by one: NMS.rs Menu goes with the last NMS.rs mod (it alone kept
+    /// z_Combined Mods alive) and comes back with the next mod installed.
+    #[test]
+    fn menu_follows_the_last_mod_out_and_back() {
+        let root = menu_and_two_mods("menu-follow");
+        let menu = mods_dir(&root).join("NMSrsMenu");
+        assert_eq!(park_mod(&root, "CraftFromStorage", false).unwrap(), "parked CraftFromStorage");
+        assert!(menu.is_dir(), "another NMS.rs mod is still live");
+        let text = park_mod(&root, "QuickRecharge", false).unwrap();
+        assert!(text.contains("also parked NMSrsMenu"), "{text}");
+        assert!(!menu.exists() && parked_dir(&root).join("NMSrsMenu").is_dir());
+        assert!(mods_dir(&root).join("Someone Elses Mod").is_dir(), "other mods are not ours to park");
+        assert!(auto_install(&root).is_empty(), "auto install respects the park");
+        let text = unpark_mod(&root, "QuickRecharge", false).unwrap();
+        assert!(text.contains("also restored NMSrsMenu"), "{text}");
+        assert!(menu.is_dir());
+        assert!(!auto_parked_path(&root).exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A menu the player parked by hand stays parked when mods come back.
+    #[test]
+    fn hand_parked_menu_stays_parked() {
+        let root = menu_and_two_mods("menu-hand");
+        park_mod(&root, "NMSrsMenu", false).unwrap();
+        park_mod(&root, "CraftFromStorage", false).unwrap();
+        park_mod(&root, "QuickRecharge", false).unwrap();
+        assert!(!auto_parked_path(&root).exists());
+        unpark_mod(&root, "QuickRecharge", false).unwrap();
+        assert!(!mods_dir(&root).join("NMSrsMenu").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// Remove all, then installing one mod brings the menu back; installing the menu by hand
+    /// clears the note.
+    #[test]
+    fn park_all_takes_the_menu_and_install_brings_it_back() {
+        let root = menu_and_two_mods("menu-all");
+        write(&stock_dir(&root).join("CraftFromStorage").join("x.txt"), "x\n");
+        let text = park_all(&root, false).unwrap();
+        assert_eq!(text, "parked CraftFromStorage, QuickRecharge, NMSrsMenu");
+        assert!(auto_parked_path(&root).is_file());
+        let text = install_mod(&root, "CraftFromStorage", false).unwrap();
+        assert!(text.contains("also restored NMSrsMenu"), "{text}");
+        assert!(mods_dir(&root).join("NMSrsMenu").is_dir());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A file the UI merge set aside goes back to its name when its mod is parked.
+    #[test]
+    fn park_restores_files_set_aside_by_the_merge() {
+        let root = menu_and_two_mods("merged");
+        let live = mods_dir(&root).join("QuickRecharge").join("UI").join("A.MBIN.merged");
+        write(&live, "mbin\n");
+        park_mod(&root, "QuickRecharge", false).unwrap();
+        let parked = parked_dir(&root).join("QuickRecharge").join("UI");
+        assert!(parked.join("A.MBIN").is_file());
+        assert!(!parked.join("A.MBIN.merged").exists());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
