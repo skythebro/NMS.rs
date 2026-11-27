@@ -1,7 +1,7 @@
 # NMS.rs as an ASI plugin
 
-Status: merged to main 2026-11-27, in-game runs 1 and 2 passed on Windows. Not released or uploaded yet; nothing
-merged. Facts are marked **Confirmed** (read in our code or in the loader's source, or tested
+Status: merged to main 2026-11-27; in-game runs 1 and 2 passed on Windows. Not released or
+uploaded yet. Facts are marked **Confirmed** (read in our code or in the loader's source, or tested
 here), **Inferred** (follows from confirmed facts, not tested) or **Unknown**.
 
 ## Why
