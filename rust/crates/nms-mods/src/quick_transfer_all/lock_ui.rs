@@ -325,10 +325,7 @@ impl Runtime {
     }
 
     fn instant_ui(&self) -> bool {
-        if self.instant_ui_addr < MIN_ADDR {
-            return false;
-        }
-        read_u8(self.instant_ui_addr).unwrap_or(0) != 0
+        super::game::instant_ui_byte(self.instant_ui_addr).unwrap_or(0) != 0
     }
 
     pub fn confirm_need(&mut self, _mouse: bool) -> f32 {

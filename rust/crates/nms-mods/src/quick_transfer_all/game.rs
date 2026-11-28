@@ -100,6 +100,7 @@ pub struct Game {
     pub confirm_mouse_addr: usize,
     pub confirm_slow_addr: usize,
     pub confirm_ok: bool,
+    /// The application global the "instant UI" byte is read through (see `instant_ui_byte`).
     pub instant_ui_addr: usize,
     pub pickup_ok: bool,
     pub sell_ok: bool,
@@ -530,16 +531,21 @@ fn instant_ui_addr(start: usize) -> usize {
     if at - mov > 16 {
         return 0;
     }
-    let Some(global) = rel32_va(start.wrapping_add(mov).wrapping_add(3)) else {
-        return 0;
-    };
-    let Some(app) = read_u64(global) else {
-        return 0;
-    };
-    if (app as usize) < MIN_ADDR {
-        return 0;
+    // The application global, not the object it points to: at boot (when this runs) the object can
+    // still be missing, and the setting then read as "off" for the whole session.
+    rel32_va(start.wrapping_add(mov).wrapping_add(3)).unwrap_or(0)
+}
+
+/// The game's "instant UI" byte, read through the application global each time.
+pub fn instant_ui_byte(global: usize) -> Option<u8> {
+    if global < MIN_ADDR {
+        return None;
     }
-    (app as usize).wrapping_add(CONFIRM_INSTANT_OFF)
+    let app = read_u64(global)? as usize;
+    if app < MIN_ADDR {
+        return None;
+    }
+    mem::read_u8(app.wrapping_add(CONFIRM_INSTANT_OFF))
 }
 
 fn add_voice(image: &ProcessImage, sig: &str, at: usize, sites: &mut Vec<VoiceSite>) {
